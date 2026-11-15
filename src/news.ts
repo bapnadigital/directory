@@ -20,6 +20,7 @@ export async function refreshNews(env: Env): Promise<number> {
   for (const it of items) {
     let title = tag(it, "title"); const link = tag(it, "link"), source = tag(it, "source"), pub = Date.parse(tag(it, "pubDate")) / 1000;
     if (!title || !/^https?:\/\//.test(link)) continue;
+    if (/^top \d+|best \d+|\bOEM\b|coupon|promo code|horoscope|press release/i.test(title)) continue;
     if (source && title.endsWith(` - ${source}`)) title = title.slice(0, -(source.length + 3));
     stmts.push(env.DB.prepare(`INSERT OR IGNORE INTO news (title, url, source, topic, published_at, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
       .bind(title.slice(0, 220), link.slice(0, 900), source.slice(0, 80) || null, q, Number.isFinite(pub) ? Math.floor(pub) : now(), now()));

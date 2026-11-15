@@ -59,6 +59,9 @@ export function page(c: Context<AppEnv>, o: PageOpts, body: Child) {
             </div>
           </header>
         )}
+        {!o.bare && (
+          <nav class="subnav"><a href="/directory">Directory</a><a href="/rates">Gold rates</a><a href="/tools">Tools</a><a href="/requirements">Buy requirements</a><a href="/news">News</a><a href="/states">States</a><a href="/cities">Cities</a><a href="/categories">Categories</a><a href="/pricing">Membership</a></nav>
+        )}
         {body}
         {!o.bare && (
           <footer class="site">

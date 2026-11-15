@@ -67,3 +67,7 @@ section+section{padding-top:8px}
 .ad.house{padding:12px 84px 12px 16px;text-align:left;border-style:dashed}.ad.house .ad-tag{top:50%;transform:translateY(-50%)}
 @media(max-width:700px){table.fit{display:table;white-space:normal}table.fit th,table.fit td{padding:8px 5px;font-size:13px}table.fit .opt{display:none}}
 @media(max-width:560px){header.site .wrap{gap:8px;padding:0 12px}header.site .logo{font-size:15px;white-space:nowrap}nav.main{flex-wrap:nowrap;gap:0}nav.main a{padding:6px 7px;font-size:13px}nav.main a.btn{padding:7px 11px}}
+.subnav{display:none}
+@media(max-width:560px){.subnav{display:flex;gap:6px;overflow-x:auto;padding:8px 12px;border-bottom:1px solid var(--border);white-space:nowrap;-webkit-overflow-scrolling:touch;scrollbar-width:none}.subnav::-webkit-scrollbar{display:none}
+.subnav a{flex:none;font-size:13px;color:var(--muted);padding:5px 11px;border:1px solid var(--border);border-radius:999px}nav.main a:not(.btn){display:none}}
+.ad.house{position:relative}.ad.house .ad-tag{position:absolute;right:10px;left:auto}
