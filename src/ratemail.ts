@@ -40,3 +40,24 @@ export async function dailyRates(env: Env): Promise<void> {
       `Rates at 11 am, ${nice} (Mumbai)\n\n${lines}\n\nLive rates and calculators: ${base}/rates\nRates by ${RATE_SOURCE.name}: ${RATE_SOURCE.url}\n\nIndicative rates for reference only. Confirm with your dealer before booking.\n\nStop this email: ${base}/rates/unsubscribe?t=${s.token}`);
   }
 }
+
+// Target-rate alerts for signed-in members: one email when the rate crosses the target, then the alert is spent.
+export const ALERT_METALS = { gold: "Gold 995 with GST (per 10 g)", silver: "Silver with GST (per kg)" } as const;
+export async function checkAlerts(env: Env): Promise<void> {
+  if (!env.SITE_URL) return;
+  const open = await env.DB.prepare(`SELECT count(*) AS n FROM rate_alerts WHERE fired_at IS NULL`).first<{ n: number }>();
+  if (!open?.n) return;
+  const r = await getRates(env);
+  if (!r || r.stale) return;
+  const k = keyRates(r), base = env.SITE_URL.replace(/\/$/, "");
+  const cur = { gold: k.gold995gst, silver: k.silverGst };
+  const hits = (await env.DB.prepare(`SELECT a.id, a.metal, a.dir, a.target, u.email, u.name FROM rate_alerts a JOIN users u ON u.id = a.user_id
+    WHERE a.fired_at IS NULL AND ((a.metal = 'gold' AND ?1 IS NOT NULL AND ((a.dir = 'above' AND ?1 >= a.target) OR (a.dir = 'below' AND ?1 <= a.target)))
+      OR (a.metal = 'silver' AND ?2 IS NOT NULL AND ((a.dir = 'above' AND ?2 >= a.target) OR (a.dir = 'below' AND ?2 <= a.target)))) LIMIT 40`)
+    .bind(cur.gold, cur.silver).all<{ id: number; metal: "gold" | "silver"; dir: string; target: number; email: string; name: string }>()).results;
+  for (const h of hits) {
+    await env.DB.prepare(`UPDATE rate_alerts SET fired_at = ? WHERE id = ? AND fired_at IS NULL`).bind(now(), h.id).run();
+    await sendMail(env, base, h.email, `Rate alert: ${h.metal === "gold" ? "gold" : "silver"} is ${h.dir} ${inr(h.target)}`,
+      `Hello ${h.name},\n\n${ALERT_METALS[h.metal]} is now ${inr(cur[h.metal])}, ${h.dir} your target of ${inr(h.target)}.\n\nLive rates: ${base}/rates\nRates by ${RATE_SOURCE.name}: ${RATE_SOURCE.url}\n\nIndicative rates for reference only. This alert has now been used; set a new one at ${base}/rates#alerts`);
+  }
+}

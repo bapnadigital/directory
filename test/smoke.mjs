@@ -134,5 +134,9 @@ r = await anon("/rates/confirm?t=bad"); ok("bad confirm link rejected", r.loc.in
 r = await anon("/guides"); ok("guides index", r.status === 200 && r.text.includes("BIS hallmark"));
 r = await anon("/guides/gst-on-gold-jewellery"); ok("guide page", r.status === 200 && r.text.includes("3% GST"));
 r = await anon("/guides/nope"); ok("unknown guide 404", r.status === 404);
+r = await other("/rates/alerts", { method: "POST", form: { metal: "gold", dir: "below", target: "120000" } }); ok("rate alert set", r.loc.includes("aok="));
+r = await other("/rates"); ok("rate alert listed for its owner", r.text.includes("1,20,000"));
+r = await anon("/rates"); ok("rate alerts private", !r.text.includes("1,20,000") && r.text.includes("Sign in</a> to set a rate alert"));
+r = await other("/rates/alerts", { method: "POST", form: { metal: "tin", dir: "below", target: "5" } }); ok("rate alert validation", r.loc.includes("aerr="));
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

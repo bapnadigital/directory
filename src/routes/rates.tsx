@@ -6,7 +6,8 @@ import { RATE_SOURCE, getRates, inr, keyRates, perGram } from "../rates";
 import { Flash, page, siteUrl } from "../ui";
 import { allow } from "../db";
 import { clientIp } from "../auth";
-import { subscribe } from "../ratemail";
+import { ALERT_METALS, subscribe } from "../ratemail";
+import { now } from "../db";
 
 export const ratesApp = new Hono<AppEnv>();
 const when = (t: number) => new Date(t * 1000).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
@@ -46,6 +47,8 @@ ratesApp.get("/rates", async (c) => {
   const k = keyRates(r);
   const g = perGram(k);
   const base = siteUrl(c);
+  const me = c.get("user");
+  const alerts = me ? (await c.env.DB.prepare(`SELECT id, metal, dir, target, fired_at FROM rate_alerts WHERE user_id = ? ORDER BY id DESC LIMIT 10`).bind(me.id).all<{ id: number; metal: string; dir: string; target: number; fired_at: number | null }>()).results : [];
   const hist = (await c.env.DB.prepare(`SELECT ts, gold995gst, silver_gst FROM rate_history WHERE ts > ? ORDER BY ts`).bind(Math.floor(Date.now() / 1000) - 7 * 86400).all<{ ts: number; gold995gst: number | null; silver_gst: number | null }>()).results;
   const gp = hist.map((x) => x.gold995gst).filter((x): x is number => x != null), sp = hist.map((x) => x.silver_gst).filter((x): x is number => x != null);
   const days = (await c.env.DB.prepare(`SELECT date(ts + 19800, 'unixepoch') AS d, min(gold995gst) AS glo, max(gold995gst) AS ghi, min(silver_gst) AS slo, max(silver_gst) AS shi,
@@ -125,6 +128,21 @@ ratesApp.get("/rates", async (c) => {
         </form>
       </div>
 
+      <div class="card" id="alerts" style="margin-top:14px">
+        <h2 style="font-size:18px">Rate alert</h2>
+        <p class="small muted">Get one email the moment gold or silver crosses your target. Up to 5 alerts.</p>
+        <Flash ok={c.req.query("aok")} err={c.req.query("aerr")} />
+        {me ? (<>
+          <form method="post" action="/rates/alerts" class="row">
+            <select name="metal" style="width:auto">{Object.entries(ALERT_METALS).map(([v, l]) => <option value={v}>{l}</option>)}</select>
+            <select name="dir" style="width:auto"><option value="below">falls to or below</option><option value="above">rises to or above</option></select>
+            <input name="target" type="number" min={1000} max={9999999} required placeholder="Target ₹" style="width:150px" />
+            <button class="btn" type="submit">Set alert</button>
+          </form>
+          {alerts.map((a) => <div class="row between small" style="border-top:1px solid var(--border);padding-top:8px;margin-top:8px"><span>{ALERT_METALS[a.metal as keyof typeof ALERT_METALS] ?? a.metal} {a.dir} <b>{inr(a.target)}</b>{a.fired_at ? <span class="badge soft" style="margin-left:6px">Sent</span> : null}</span><form method="post" action={`/rates/alerts/${a.id}/delete`}><button class="btn ghost sm" type="submit">Remove</button></form></div>)}
+        </>) : <p class="small"><a class="gold" href="/login?next=%2Frates%23alerts">Sign in</a> to set a rate alert. It is free.</p>}
+      </div>
+
       <div class="band" style="margin-top:20px;padding:26px">
         <div class="eyebrow">Rate partner</div>
         <h2 style="font-size:22px;margin-top:6px">Book bullion at these rates with {RATE_SOURCE.name}</h2>
@@ -175,6 +193,24 @@ ratesApp.get("/rates/confirm", async (c) => {
 ratesApp.get("/rates/unsubscribe", async (c) => {
   await c.env.DB.prepare(`DELETE FROM rate_subs WHERE token = ?`).bind(String(c.req.query("t") ?? "")).run();
   return c.redirect(`/rates?ok=${encodeURIComponent("You will not receive the rate email any more.")}#email`, 303);
+});
+
+ratesApp.post("/rates/alerts", async (c) => {
+  const u = c.get("user");
+  if (!u) return c.redirect("/login?next=%2Frates%23alerts", 303);
+  const to = (k: string, m: string) => c.redirect(`/rates?${k}=${encodeURIComponent(m)}#alerts`, 303);
+  const f = await c.req.parseBody();
+  const metal = String(f.metal), dir = String(f.dir), target = Math.round(Number(f.target));
+  if (!(metal in ALERT_METALS) || !["above", "below"].includes(dir) || !Number.isFinite(target) || target < 1000 || target > 9999999) return to("aerr", "Please choose a metal, a direction and a target rate in rupees");
+  const n = await c.env.DB.prepare(`SELECT count(*) AS n FROM rate_alerts WHERE user_id = ? AND fired_at IS NULL`).bind(u.id).first<{ n: number }>();
+  if ((n?.n ?? 0) >= 5) return to("aerr", "You already have 5 open alerts. Remove one first.");
+  await c.env.DB.prepare(`INSERT INTO rate_alerts (user_id, metal, dir, target, created_at) VALUES (?, ?, ?, ?, ?)`).bind(u.id, metal, dir, target, now()).run();
+  return to("aok", `Alert set. We will email ${u.email} once.`);
+});
+ratesApp.post("/rates/alerts/:id{[0-9]+}/delete", async (c) => {
+  const u = c.get("user");
+  if (u) await c.env.DB.prepare(`DELETE FROM rate_alerts WHERE id = ? AND user_id = ?`).bind(Number(c.req.param("id")), u.id).run();
+  return c.redirect("/rates#alerts", 303);
 });
 
 ratesApp.get("/widget/rates", async (c) => {

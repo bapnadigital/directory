@@ -9,7 +9,7 @@ import { snapshotRates } from "./rates";
 import { ratesApp } from "./routes/rates";
 import { toolsApp } from "./routes/tools";
 import { weeklyDigest } from "./digest";
-import { dailyRates } from "./ratemail";
+import { checkAlerts, dailyRates } from "./ratemail";
 import { refreshNews } from "./news";
 import { market } from "./routes/market";
 import { info } from "./routes/info";
@@ -64,6 +64,7 @@ export default {
       try { if ((await importJtBatchDone(env))) await tagAllied(env); } catch (e) { console.error("allied", e); }
       try { await snapshotRates(env); } catch (e) { console.error("rates", e); }
       try { await dailyRates(env); } catch (e) { console.error("ratemail", e); }
+      try { await checkAlerts(env); } catch (e) { console.error("alerts", e); }
       try { await importJtBatch(env, 4); } catch (e) { console.error("jt import", e); }
       await env.DB.prepare(`DELETE FROM sessions WHERE expires_at < ?`).bind(now()).run();
     })());

@@ -3,7 +3,8 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import type { AppEnv } from "../auth";
 import { allow, now } from "../db";
-import { Flash } from "../ui";
+import { Flash, siteUrl } from "../ui";
+import { sendMail } from "../mail";
 
 // Ratings and reviews on claimed listings: one per signed-in user per business,
 // the owner can reply, the admin can hide.
@@ -66,6 +67,11 @@ reviews.post("/b/:slug/review", async (c) => {
   if (!(await allow(c.env, `rev:${u.id}`, 6, 86400))) return back("rerr", "You have posted several reviews today. Please try again tomorrow.");
   await c.env.DB.prepare(`INSERT INTO reviews (business_id, user_id, rating, body, created_at) VALUES (?, ?, ?, ?, ?)
     ON CONFLICT (business_id, user_id) DO UPDATE SET rating = excluded.rating, body = excluded.body, created_at = excluded.created_at, status = 'live'`).bind(b.id, u.id, rating, body || null, now()).run();
+  const reqUrl = c.req.url, base = siteUrl(c);
+  c.executionCtx.waitUntil((async () => {
+    const o = await c.env.DB.prepare(`SELECT email FROM users WHERE id = ?`).bind(b.owner_id).first<{ email: string }>();
+    await sendMail(c.env, reqUrl, o?.email, `New ${rating}-star review on your listing`, `${u.name.split(/\s+/)[0]} rated your business ${rating} out of 5 on ${c.env.BRAND_NAME}.\n${body ? `\n"${body}"\n` : ""}\nRead it and reply: ${base}/b/${slug}#reviews`);
+  })());
   return back("rok", "Thank you. Your review is live.");
 });
 

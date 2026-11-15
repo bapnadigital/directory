@@ -6,6 +6,7 @@ import { type AppEnv, clientIp } from "../auth";
 import { type Business, allow, isPremium, now, PLANS, PLAN_LIMITS, cacheBust } from "../db";
 import { Ad, Showcase, Sponsors } from "./ads";
 import { RateStrip } from "./rates";
+import { GUIDES } from "./guides";
 import { ReviewsBlock, isSaved, loadReviews } from "./reviews";
 import { sendMail } from "../mail";
 import { LatestNews, LatestRequests } from "./market";
@@ -159,6 +160,10 @@ pub.get("/", async (c) => {
         </div>
       </section>
 
+      <section class="wrap">
+        <div class="head"><div><div class="eyebrow">Guides</div><h2>Know the rules of the trade</h2></div><a class="gold small" href="/guides">All guides →</a></div>
+        <div class="grid g3">{GUIDES.slice(0, 3).map((g) => <a class="card" href={`/guides/${g.slug}`}><b>{g.title}</b><p class="small muted" style="margin:6px 0 0">{g.desc}</p></a>)}</div>
+      </section>
       <LatestNews c={c} />
 
       <Sponsors c={c} />
