@@ -4,6 +4,8 @@ import { secureHeaders } from "hono/secure-headers";
 import { type AppEnv, sessionMiddleware } from "./auth";
 import { type Env, ensureSchema, now } from "./db";
 import { importBatch } from "./import";
+import { importJtBatch } from "./jt-import";
+import { contact } from "./routes/contact";
 import { account } from "./routes/account";
 import { admin } from "./routes/admin";
 import { pub } from "./routes/public";
@@ -15,6 +17,7 @@ app.use("*", secureHeaders({ xFrameOptions: "DENY", referrerPolicy: "strict-orig
 app.use("*", async (c, next) => { await ensureSchema(c.env); await next(); });
 app.use("*", sessionMiddleware);
 
+app.route("/", contact);
 app.route("/", pub);
 app.route("/", account);
 app.route("/admin", admin);
@@ -27,7 +30,8 @@ export default {
   async scheduled(_ev: ScheduledController, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil((async () => {
       await ensureSchema(env);
-      await importBatch(env, 4);
+      try { await importBatch(env, 4); } catch (e) { console.error("import", e); }
+      try { await importJtBatch(env, 1); } catch (e) { console.error("jt import", e); }
       await env.DB.prepare(`DELETE FROM sessions WHERE expires_at < ?`).bind(now()).run();
     })());
   },

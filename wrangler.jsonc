@@ -7,7 +7,7 @@
   "assets": { "directory": "./public", "binding": "ASSETS" },
   // No database_id on purpose: Cloudflare creates the database on first deploy.
   "d1_databases": [{ "binding": "DB", "database_name": "jsh-directory" }],
-  "triggers": { "crons": ["*/2 * * * *"] },
+  "triggers": { "crons": ["* * * * *"] },
   "observability": { "enabled": true },
   "vars": {
     "BRAND_NAME": "Jewellery Sahi Hai",

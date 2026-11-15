@@ -1,6 +1,7 @@
 /** @jsxImportSource hono/jsx */
 import { Hono, type Context } from "hono";
 import { type AppEnv, requireAdmin } from "../auth";
+import { JT_CHUNKS } from "../data/jt-index";
 import { type PlanKey, PLANS, getMeta, now, setMeta } from "../db";
 import { importBatch } from "../import";
 import { Field, Flash, page } from "../ui";
@@ -24,6 +25,8 @@ admin.get("/", async (c) => {
     db.prepare(`SELECT p.id, p.plan, p.amount, p.provider, p.created_at, b.name, b.slug, u.name AS uname, u.email, u.phone FROM payments p JOIN businesses b ON b.id = p.business_id JOIN users u ON u.id = p.user_id WHERE p.status = 'requested' ORDER BY p.created_at DESC LIMIT 100`).all<{ id: number; plan: PlanKey; amount: number; provider: string | null; created_at: number; name: string; slug: string; uname: string; email: string; phone: string | null }>(),
     getMeta(c.env, "import_offset"), getMeta(c.env, "import_total"), getMeta(c.env, "import_done"), getMeta(c.env, "import_note"),
   ]);
+  const jtDone = Number((await getMeta(c.env, "jt_chunk")) ?? 0);
+  const jtChunks = JT_CHUNKS.length;
   return page(c, { title: "Admin", noindex: true }, (
     <main class="wrap" style="padding-top:24px">
       <h1 style="font-size:26px;margin-bottom:14px">Admin</h1>
@@ -61,6 +64,7 @@ admin.get("/", async (c) => {
         </form>
         <div class="card">
           <b>Business import</b>
+          <p class="small muted">Trade directory listings: {jtDone} of {jtChunks} batches loaded.</p>
           <p class="small muted">{done === "1" ? `Finished: ${Number(off ?? 0).toLocaleString("en-IN")} businesses read from the old site.` : `In progress: ${Number(off ?? 0).toLocaleString("en-IN")} of ${total ? Number(total).toLocaleString("en-IN") : "?"} read. It continues by itself every 2 minutes.`} {note && note !== "finished" ? `(${note})` : ""}</p>
           <div class="row"><form method="post" action="/admin/import/run"><button class="btn ghost sm" type="submit">Run a batch now</button></form>
             <form method="post" action="/admin/import/restart" data-confirm="Re-read all businesses from the old site? Existing listings are kept."><button class="btn ghost sm" type="submit">Re-run from start</button></form></div>

@@ -3,6 +3,7 @@ import { Hono, type Context } from "hono";
 import QRCode from "qrcode-svg";
 import { type AppEnv, clientIp } from "../auth";
 import { type Business, allow, isPremium, now, PLANS, PLAN_LIMITS } from "../db";
+import { DAILY_REVEALS, hasReveal, isPaidMember, revealsToday } from "./contact";
 import { CITIES, THEMES, TRADE_TYPES, findCity, findType, initials, safeUrl, waNumber } from "../content";
 import { BizCard, type Card, Field, Flash, page, siteUrl } from "../ui";
 
@@ -266,6 +267,12 @@ pub.get("/b/:slug", async (c) => {
   c.executionCtx.waitUntil(db.prepare(`UPDATE businesses SET views = views + 1 WHERE id = ?`).bind(b.id).run());
   const premium = isPremium(b);
   const claimed = !!b.owner_id;
+  const viewer = c.get("user");
+  const pc = await db.prepare(`SELECT (mobile IS NOT NULL) AS m, (tel IS NOT NULL) AS t, (email IS NOT NULL) AS e FROM private_contacts WHERE business_id = ?`).bind(b.id).first<{ m: number; t: number; e: number }>();
+  const paid = pc ? await isPaidMember(db, viewer) : false;
+  const revealed = pc && paid && viewer ? await hasReveal(db, viewer.id, b.id) : false;
+  const usedToday = pc && paid && viewer ? await revealsToday(db, viewer.id) : 0;
+  const cerr = c.req.query("cerr");
   const wa = claimed ? waNumber(b.whatsapp || b.phone) : null;
   const web = claimed ? safeUrl(b.website) : null;
   const gallery = extras.results.filter((e) => e.kind === "gallery" && e.image_id);
@@ -351,6 +358,33 @@ pub.get("/b/:slug", async (c) => {
         </div>
 
         <aside class="stack">
+          {pc && (
+            <div class="card" id="contact" style="border-color:rgba(233,196,106,.45)">
+              <h2 style="font-size:18px;margin-bottom:8px">Contact details</h2>
+              {cerr && <Flash err={cerr} />}
+              {revealed ? (
+                <div class="stack small">
+                  {pc.m ? <div><b>Mobile</b><br /><img src={`/b/${b.slug}/contact.svg?f=mobile`} alt="Mobile number" draggable={false} style="max-width:100%;height:auto" /></div> : null}
+                  {pc.t ? <div><b>Landline</b><br /><img src={`/b/${b.slug}/contact.svg?f=tel`} alt="Landline number" draggable={false} style="max-width:100%;height:auto" /></div> : null}
+                  {pc.e ? <div><b>Email</b><br /><img src={`/b/${b.slug}/contact.svg?f=email`} alt="Email address" draggable={false} style="max-width:100%;height:auto" /></div> : null}
+                  {(pc.m || pc.t) ? <a class="btn sm" href={`/b/${b.slug}/call`} rel="nofollow">Call</a> : null}
+                  <p class="tiny muted">For your own business use. Each view is recorded against your account. {usedToday} of {DAILY_REVEALS} used today.</p>
+                </div>
+              ) : (
+                <div>
+                  <p class="small muted" style="margin:0 0 10px">{[pc.m ? "Mobile" : "", pc.t ? "Landline" : "", pc.e ? "Email" : ""].filter(Boolean).join(" · ")} available for paid members.</p>
+                  {paid ? (
+                    <form method="post" action={`/b/${b.slug}/contact`}><button class="btn block" type="submit">Show contact</button><p class="tiny muted center">{usedToday} of {DAILY_REVEALS} used today.</p></form>
+                  ) : (
+                    <a class="btn block" href={viewer ? "/pricing?need=contact" : `/login?next=${encodeURIComponent(`/b/${b.slug}`)}`}>🔒 {viewer ? "Upgrade to view" : "Sign in to view"}</a>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+          {!claimed && b.source === "jt2023" && b.address && (
+            <div class="card small"><b>Address</b><p class="muted" style="margin:2px 0;white-space:pre-line">{b.address}</p></div>
+          )}
           {claimed && (b.address || b.hours) && (
             <div class="card small">
               {b.address && <><b>Address</b><p class="muted" style="margin:2px 0 10px;white-space:pre-line">{b.address}</p></>}
@@ -517,7 +551,7 @@ pub.get("/pricing", (c) => page(c, { title: "Membership plans", desc: "Free and 
       <div class="card" style="border-color:rgba(233,196,106,.6)"><h2 style="font-size:20px">Premium <span class="badge gold">★ Featured</span></h2>
         <div class="stat"><b>₹{PLANS.premium_monthly.amount.toLocaleString("en-IN")}<span class="small muted"> / month</span></b></div>
         <div class="small muted">or ₹{PLANS.premium_yearly.amount.toLocaleString("en-IN")} / year</div>
-        <ul class="small muted"><li>Featured badge and top placement in search, city and category pages</li><li>Catalogue: {PLAN_LIMITS.premium.products} products</li><li>Bio link with {PLAN_LIMITS.premium.links} links, no "Powered by"</li><li>{PLAN_LIMITS.premium.gallery} gallery photos, {PLAN_LIMITS.premium.offers} offers, {PLAN_LIMITS.premium.faqs} FAQs</li><li>Shown on the homepage</li></ul>
+        <ul class="small muted"><li>Featured badge and top placement in search, city and category pages</li><li>Catalogue: {PLAN_LIMITS.premium.products} products</li><li>Bio link with {PLAN_LIMITS.premium.links} links, no "Powered by"</li><li>{PLAN_LIMITS.premium.gallery} gallery photos, {PLAN_LIMITS.premium.offers} offers, {PLAN_LIMITS.premium.faqs} FAQs</li><li>Shown on the homepage</li><li>Mobile numbers and emails of 20,000+ trade listings: open up to 30 a day</li></ul>
         <a class="btn block" href="/dashboard/membership">Upgrade</a></div>
     </div>
   </main>
@@ -537,7 +571,7 @@ pub.get("/privacy", legal("Privacy", [
 ]));
 
 // ───────────────────────── SEO files ─────────────────────────
-pub.get("/robots.txt", (c) => c.text(`User-agent: *\nAllow: /\nDisallow: /dashboard\nDisallow: /admin\nDisallow: /go/\n\nSitemap: ${siteUrl(c)}/sitemap.xml\n`));
+pub.get("/robots.txt", (c) => c.text(`User-agent: *\nAllow: /\nDisallow: /dashboard\nDisallow: /admin\nDisallow: /go/\nDisallow: /*/contact\nDisallow: /*/call\n\nSitemap: ${siteUrl(c)}/sitemap.xml\n`));
 
 const SM_CHUNK = 5000;
 pub.get("/sitemap.xml", async (c) => {

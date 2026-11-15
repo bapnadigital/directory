@@ -13,7 +13,7 @@ export type Env = {
   CASHFREE_ENV?: string;
 };
 
-const SCHEMA_VERSION = "1";
+const SCHEMA_VERSION = "2";
 
 const SCHEMA: string[] = [
   `CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
@@ -70,6 +70,12 @@ const SCHEMA: string[] = [
      provider TEXT, ref TEXT, created_at INTEGER NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS payments_status_idx ON payments (status, created_at)`,
   `CREATE TABLE IF NOT EXISTS rate (key TEXT PRIMARY KEY, count INTEGER NOT NULL, window_start INTEGER NOT NULL)`,
+  // Contact details shown only to paid members, one reveal at a time.
+  `CREATE TABLE IF NOT EXISTS private_contacts (business_id INTEGER PRIMARY KEY, mobile TEXT, tel TEXT, email TEXT)`,
+  `CREATE TABLE IF NOT EXISTS reveals (
+     id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, business_id INTEGER NOT NULL,
+     day TEXT NOT NULL, created_at INTEGER NOT NULL, UNIQUE (user_id, business_id, day))`,
+  `CREATE INDEX IF NOT EXISTS reveals_user_day_idx ON reveals (user_id, day)`,
 ];
 
 let ready: Promise<void> | null = null;
