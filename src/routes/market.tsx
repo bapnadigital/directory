@@ -10,7 +10,7 @@ import { Field, Flash, page } from "../ui";
 // Buy requirements board and industry news.
 export const market = new Hono<AppEnv>();
 type C = Context<AppEnv>;
-type Req = { id: number; title: string; category: string | null; details: string | null; qty: string | null; city: string | null; name: string; phone: string; created_at: number; status: string; views: number; kind: string };
+type Req = { id: number; title: string; category: string | null; details: string | null; qty: string | null; city: string | null; name: string; phone: string; created_at: number; status: string; views: number; kind: string; user_id: number | null };
 const ago = (t: number) => { const d = Math.floor((Date.now() / 1000 - t) / 86400); return d <= 0 ? "Today" : d === 1 ? "Yesterday" : `${d} days ago`; };
 const s = (v: unknown, n: number) => String(v ?? "").trim().slice(0, n);
 
@@ -68,14 +68,21 @@ market.get("/requirements", async (c) => {
   const where = ["status = 'open'", "created_at > ?"], args: (string | number)[] = [now() - 60 * 86400];
   if (cat) { where.push("category = ?"); args.push(cat.slug); }
   if (kind) { where.push("kind = ?"); args.push(kind.slug); }
+  const q = s(c.req.query("q"), 60), city = s(c.req.query("city"), 40);
+  for (const w of q.split(/\s+/).filter((x) => x.length > 1).slice(0, 4)) { where.push("(title LIKE ? OR details LIKE ?)"); args.push(`%${w}%`, `%${w}%`); }
+  if (city) { where.push("city LIKE ?"); args.push(`${city}%`); }
   const rows = (await c.env.DB.prepare(`SELECT id, title, category, qty, city, details, kind, created_at FROM requests WHERE ${where.join(" AND ")} ORDER BY created_at DESC LIMIT 100`).bind(...args).all<Req>()).results;
-  const q = (k?: string, t?: string) => { const p = new URLSearchParams(); if (k) p.set("kind", k); if (t) p.set("category", t); const x = p.toString(); return `/requirements${x ? `?${x}` : ""}`; };
-  return page(c, { title: "Jewellery trade board — buy requirements, stock offers and jobs", desc: "Open buy requirements, stock offers, job vacancies and karigars available for work across the Indian jewellery trade. Free to post.", path: "/requirements", noindex: !!cat || !!kind }, (
+  const link = (k?: string, t?: string) => { const p = new URLSearchParams(); if (k) p.set("kind", k); if (t) p.set("category", t); const x = p.toString(); return `/requirements${x ? `?${x}` : ""}`; };
+  return page(c, { title: "Jewellery trade board — buy requirements, stock offers and jobs", desc: "Open buy requirements, stock offers, job vacancies and karigars available for work across the Indian jewellery trade. Free to post.", path: "/requirements", noindex: !!cat || !!kind || !!q || !!city }, (
     <main class="wrap" style="padding-top:26px">
       <div class="head"><div><div class="eyebrow">Trade board</div><h1 style="font-size:30px;margin-top:6px">{kind ? kind.plural : "Buyers looking for suppliers, offers and jobs"}</h1></div><a class="btn" href="/requirements/new">Post free</a></div>
       <Flash ok={c.req.query("ok")} />
-      <div class="row" style="gap:6px;margin-bottom:8px"><a class={`badge ${kind ? "" : "gold"}`} href={q(undefined, cat?.slug)}>Everything</a>{KINDS.map((k) => <a class={`badge ${kind?.slug === k.slug ? "gold" : ""}`} href={q(k.slug, cat?.slug)}>{k.plural}</a>)}</div>
-      <div class="row" style="gap:6px;margin-bottom:14px"><a class={`badge ${cat ? "" : "gold"}`} href={q(kind?.slug)}>All categories</a>{TRADE_TYPES.map((t) => <a class={`badge ${cat?.slug === t.slug ? "gold" : ""}`} href={q(kind?.slug, t.slug)}>{t.label}</a>)}</div>
+      <form method="get" action="/requirements" class="row" style="margin-bottom:10px">
+        {kind && <input type="hidden" name="kind" value={kind.slug} />}{cat && <input type="hidden" name="category" value={cat.slug} />}
+        <input name="q" value={q} placeholder="Search posts, e.g. CAD designer, temple jewellery" style="flex:2;min-width:180px" /><input name="city" value={city} placeholder="City" style="flex:1;min-width:110px" /><button class="btn sm" type="submit">Search</button>
+      </form>
+      <div class="row" style="gap:6px;margin-bottom:8px"><a class={`badge ${kind ? "" : "gold"}`} href={link(undefined, cat?.slug)}>Everything</a>{KINDS.map((k) => <a class={`badge ${kind?.slug === k.slug ? "gold" : ""}`} href={link(k.slug, cat?.slug)}>{k.plural}</a>)}</div>
+      <div class="row" style="gap:6px;margin-bottom:14px"><a class={`badge ${cat ? "" : "gold"}`} href={link(kind?.slug)}>All categories</a>{TRADE_TYPES.map((t) => <a class={`badge ${cat?.slug === t.slug ? "gold" : ""}`} href={link(kind?.slug, t.slug)}>{t.label}</a>)}</div>
       {rows.length === 0 ? <div class="card center muted">Nothing open here yet. Be the first to post.</div> : (
         <div class="grid g3">{rows.map((r) => <a class="card" href={`/requirements/${r.id}`}><span class="badge soft">{(findKind(r.kind) ?? KINDS[0]).label}</span><b style="display:block;margin-top:6px">{r.title}</b><p class="small muted" style="margin:6px 0">{(r.details ?? "").slice(0, 110)}{(r.details ?? "").length > 110 ? "…" : ""}</p><div class="row" style="gap:6px">{findType(r.category) && <span class="badge soft">{findType(r.category)!.label}</span>}{r.qty && <span class="badge">{r.qty}</span>}{r.city && <span class="badge">📍 {r.city}</span>}<span class="tiny muted">{ago(r.created_at)}</span></div></a>)}</div>
       )}
@@ -147,9 +154,17 @@ market.get("/requirements/:id{[0-9]+}", async (c) => {
             : <p class="small muted" style="margin:6px 0 0">Shown to businesses with a claimed listing. <a class="gold" href={u ? "/dashboard/claim" : `/login?next=${encodeURIComponent(`/requirements/${r.id}`)}`}>{u ? "Claim or add your business" : "Sign in"}</a> to see the name and number. It is free.</p>}
         </div>
       </div>
+      {u && r.status === "open" && (u.is_admin || (r.user_id && r.user_id === u.id)) ? <form method="post" action={`/requirements/${r.id}/close`} style="margin-top:12px" data-confirm="Close this post? It will stop showing your contact."><button class="btn ghost sm" type="submit">Close this post</button></form> : null}
       {t && <p class="small" style="margin-top:14px"><a class="gold" href={`/category/${t.slug}`}>Browse {t.label.toLowerCase()} in the directory →</a></p>}
     </main>
   ));
+});
+
+market.post("/requirements/:id{[0-9]+}/close", async (c) => {
+  const u = c.get("user"), id = Number(c.req.param("id"));
+  if (!u) return c.redirect("/login", 303);
+  await c.env.DB.prepare(`UPDATE requests SET status = 'closed' WHERE id = ? AND status = 'open' AND (user_id = ? OR ? = 1)`).bind(id, u.id, u.is_admin ? 1 : 0).run();
+  return c.redirect(`/requirements/${id}?ok=${encodeURIComponent("Updated")}`, 303);
 });
 
 // Trade shows and exhibitions, added from the admin panel.

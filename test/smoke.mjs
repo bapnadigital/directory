@@ -139,5 +139,13 @@ r = await other("/rates"); ok("rate alert listed for its owner", r.text.includes
 r = await anon("/rates"); ok("rate alerts private", !r.text.includes("1,20,000") && r.text.includes("Sign in</a> to set a rate alert"));
 r = await other("/rates/alerts", { method: "POST", form: { metal: "tin", dir: "below", target: "5" } }); ok("rate alert validation", r.loc.includes("aerr="));
 r = await anon("/directory?sort=rated"); ok("top rated sort shows rating on card", r.status === 200 && /★ 5\.0 \(1\)/.test(r.text) && r.text.indexOf("Test Gold Jewellers") < r.text.indexOf("Sparkle Diam"));
+r = await anon("/requirements?q=CAD+designer&city=Raj"); ok("trade board search", r.text.includes("Hiring CAD designer"));
+r = await anon("/requirements?q=zzzznothing"); ok("trade board search excludes", !r.text.includes("Hiring CAD designer"));
+r = await other("/requirements/new", { method: "POST", form: { kind: "sell", title: "Closing stock of silver payal", city: "Agra", name: "Other User", phone: "9822222222" } });
+const ownPath = r.loc.split("?")[0].replace(BASE, "");
+r = await owner(ownPath + "/close", { method: "POST" }); r = await anon(ownPath); ok("stranger cannot close a post", !r.text.includes("Closed"));
+r = await other(ownPath + "/close", { method: "POST" }); r = await anon(ownPath); ok("poster can close own post", r.text.includes("Closed"));
+r = await owner("/dashboard/reviews"); ok("owner reviews page", r.status === 200 && r.text.includes("Ask customers for a review") && r.text.includes("Updated"));
+r = await anon("/guides/995-vs-999-gold"); ok("guide has article markup", r.text.includes('"@type":"Article"'));
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

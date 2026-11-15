@@ -84,7 +84,7 @@ async function myBiz(c: C): Promise<Business | null> {
   return c.env.DB.prepare(`SELECT * FROM businesses WHERE owner_id = ? ORDER BY id LIMIT 1`).bind(c.get("user")!.id).first<Business>();
 }
 
-const NAV = [["/dashboard", "Overview"], ["/dashboard/profile", "Business profile"], ["/dashboard/products", "Catalogue"], ["/dashboard/links", "Bio link"], ["/dashboard/extras", "Photos, offers, FAQs"], ["/dashboard/enquiries", "Enquiries"], ["/dashboard/membership", "Membership"], ["/saved", "Saved listings"]] as const;
+const NAV = [["/dashboard", "Overview"], ["/dashboard/profile", "Business profile"], ["/dashboard/products", "Catalogue"], ["/dashboard/links", "Bio link"], ["/dashboard/extras", "Photos, offers, FAQs"], ["/dashboard/enquiries", "Enquiries"], ["/dashboard/reviews", "Reviews"], ["/dashboard/membership", "Membership"], ["/saved", "Saved listings"]] as const;
 
 function shell(c: C, title: string, body: Child) {
   const path = new URL(c.req.url).pathname;
@@ -593,6 +593,29 @@ account.post("/dashboard/extras/:id/delete", async (c) => {
 });
 
 // ───────────────────────── Enquiries ─────────────────────────
+account.get("/dashboard/reviews", async (c) => {
+  const b = await myBiz(c);
+  if (!b) return c.redirect("/dashboard", 302);
+  const rows = (await c.env.DB.prepare(`SELECT r.id, r.rating, r.body, r.reply, r.created_at, u.name AS uname FROM reviews r JOIN users u ON u.id = r.user_id WHERE r.business_id = ? AND r.status = 'live' ORDER BY r.created_at DESC LIMIT 50`).bind(b.id).all<{ id: number; rating: number; body: string | null; reply: string | null; created_at: number; uname: string }>()).results;
+  const link = `${siteUrl(c)}/b/${b.slug}#reviews`;
+  const ask = `https://wa.me/?text=${encodeURIComponent(`Thank you for dealing with ${b.name}. It would help us a lot if you could rate us here (takes a minute):\n${link}`)}`;
+  return shell(c, "Reviews", (<>
+    <div class="card">
+      <b>Ask customers for a review</b>
+      <p class="small muted" style="margin:6px 0 10px">Reviews show on your listing and lift you in the "Top rated" sort. Send this link to customers you have dealt with.</p>
+      <div class="row"><a class="btn sm" href={ask} target="_blank" rel="noopener">Share on WhatsApp</a><button class="btn ghost sm" type="button" data-copy={link}>Copy link</button></div>
+    </div>
+    {rows.length === 0 ? <div class="card muted" style="margin-top:12px">No reviews yet.</div> : rows.map((r) => (
+      <div class="card" style="margin-top:12px">
+        <div class="small"><b class="gold">{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</b> <b>{r.uname.split(/\s+/)[0]}</b> <span class="tiny muted">{new Date(r.created_at * 1000).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</span></div>
+        {r.body && <p class="small" style="margin:6px 0;white-space:pre-line">{r.body}</p>}
+        {r.reply ? <div class="small muted">Your reply: {r.reply}</div>
+          : <form method="post" action={`/b/${b.slug}/review/${r.id}/reply`} class="row"><input name="reply" maxlength={400} placeholder="Write a public reply" required style="flex:1" /><button class="btn ghost sm" type="submit">Reply</button></form>}
+      </div>
+    ))}
+  </>));
+});
+
 account.get("/dashboard/enquiries", async (c) => {
   const b = await myBiz(c);
   if (!b) return needBiz(c);

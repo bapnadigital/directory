@@ -2,7 +2,7 @@
 import { Hono } from "hono";
 import type { Child } from "hono/jsx";
 import type { AppEnv } from "../auth";
-import { page } from "../ui";
+import { page, siteUrl } from "../ui";
 
 // Short, plain-language trade guides. General information only.
 export const guides = new Hono<AppEnv>();
@@ -62,7 +62,10 @@ guides.get("/guides", (c) => page(c, { title: "Jewellery trade guides — hallma
 guides.get("/guides/:slug", (c) => {
   const g = GUIDES.find((x) => x.slug === c.req.param("slug"));
   if (!g) return c.notFound();
-  return page(c, { title: g.title, desc: g.desc, path: `/guides/${g.slug}` }, (
+  return page(c, { title: g.title, desc: g.desc, path: `/guides/${g.slug}`, jsonld: [
+    { "@context": "https://schema.org", "@type": "Article", headline: g.title, description: g.desc, dateModified: "2026-11-15", author: { "@type": "Organization", name: c.env.BRAND_NAME }, publisher: { "@type": "Organization", name: c.env.BRAND_NAME }, mainEntityOfPage: `${siteUrl(c)}/guides/${g.slug}` },
+    { "@context": "https://schema.org", "@type": "BreadcrumbList", itemListElement: [{ "@type": "ListItem", position: 1, name: "Guides", item: `${siteUrl(c)}/guides` }, { "@type": "ListItem", position: 2, name: g.title, item: `${siteUrl(c)}/guides/${g.slug}` }] },
+  ] }, (
     <main class="wrap narrow" style="padding-top:26px">
       <a class="small muted" href="/guides">← All guides</a>
       <h1 style="font-size:28px;margin-top:8px">{g.title}</h1>
