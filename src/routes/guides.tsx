@@ -43,6 +43,14 @@ export const GUIDES: Guide[] = [
       ["Where each is used", <>Much of India's wholesale bullion trade quotes 995 for standard bars, while coins, small bars and many retail quotes use 999. Always confirm which one a quoted rate refers to.</>],
       ["Converting a rate", <>999 rate = 995 rate × 999 ÷ 995. On ₹1,35,000 per 10 g of 995 that is about ₹543 more for 999. Rates may be quoted with or without 3% GST, so check that too.</>],
     ] },
+  { slug: "import-duty-on-gold-silver", title: "Import duty on gold and silver: how it reaches your rate", desc: "The current import duty on gold and silver, how landed cost is worked out from the international price, and why the local rate moves with the dollar.",
+    tool: ["/tools/gold-landed-cost-calculator", "Open the landed cost calculator"],
+    sections: [
+      ["The current rate", <>The effective import duty on gold and silver for commercial imports has been 15% since 13 May 2026, up from 6%. 3% IGST is charged on imports on top of that. Duty is changed by government notification, sometimes overnight, so confirm the rate in force before pricing a large deal.</>],
+      ["From London price to Mumbai rate", <ol><li>Take the international price in dollars per troy ounce and add or subtract the premium.</li><li>Convert to rupees at the day's USD/INR rate and divide by 31.1035 to get rupees per gram of fine gold.</li><li>Multiply by the bar purity (0.995 or 0.999).</li><li>Add import duty. Add 3% GST to compare with a with-GST quote.</li></ol>],
+      ["Why the local rate moves when the world price does not", <>Three things move the Indian rate: the international price, the rupee, and the local premium or discount. A weaker rupee lifts the local rate even on a flat international price. When demand is slow, dealers quote a discount to landed cost; in a shortage they quote a premium.</>],
+      ["What landed cost leaves out", <>Bank charges, freight, insurance and the dealer's margin. Treat the calculator as a parity check against a quote, not as a quote.</>],
+    ] },
   { slug: "gold-weight-units", title: "Tola, gram, ounce and other gold weight units", desc: "Conversion table for tola, grams, troy ounces, sovereign, carat and ratti used in the Indian jewellery trade.",
     tool: ["/tools/gold-weight-converter", "Open the weight converter"],
     sections: [

@@ -468,13 +468,13 @@ pub.get("/b/:slug", async (c) => {
           {products.results.length > 0 && (
             <div>
               <div class="head"><h2 style="font-size:20px">Catalogue</h2>{(productCount?.n ?? 0) > 6 && <a class="gold small" href={`/b/${b.slug}/catalogue`}>View all {productCount!.n} products →</a>}</div>
-              <div class="grid g3">{products.results.map((p) => <ProductCard p={p} slug={b.slug} />)}</div>
+              <div class="grid g3 prods">{products.results.map((p) => <ProductCard p={p} slug={b.slug} />)}</div>
             </div>
           )}
 
           {gallery.length > 0 && (
             <div><h2 style="font-size:20px;margin-bottom:12px">Gallery</h2>
-              <div class="grid g3">{gallery.map((g) => <figure style="margin:0"><img src={`/img/${g.image_id}`} alt={g.title || `${b.name} photo`} loading="lazy" style="border-radius:14px;aspect-ratio:1;object-fit:cover;width:100%" />{g.title && <figcaption class="tiny muted">{g.title}</figcaption>}</figure>)}</div>
+              <div class="grid g3 prods">{gallery.map((g) => <figure style="margin:0"><img src={`/img/${g.image_id}`} alt={g.title || `${b.name} photo`} loading="lazy" style="border-radius:14px;aspect-ratio:1;object-fit:cover;width:100%" />{g.title && <figcaption class="tiny muted">{g.title}</figcaption>}</figure>)}</div>
             </div>
           )}
 
@@ -731,7 +731,7 @@ pub.get("/sitemap/:file", async (c) => {
   const file = c.req.param("file");
   const base = siteUrl(c);
   const xml = (urls: string[]) => c.body(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map((u) => `<url><loc>${base}${u}</loc></url>`).join("\n")}\n</urlset>`, 200, { "content-type": "application/xml", "cache-control": "public, max-age=3600" });
-  if (file === "pages.xml") return xml(["/", "/directory", "/cities", "/pricing", "/rates", "/tools", "/states", "/categories", "/requirements", "/news", "/events", "/about", "/advertise", "/guides", ...["bis-hallmark-huid", "gst-on-gold-jewellery", "how-gold-jewellery-price-is-calculated", "995-vs-999-gold", "gold-weight-units"].map((g) => `/guides/${g}`), ...CITIES.flatMap((ct) => ["manufacturer", "wholesaler", "retailer", "bullion", "diamonds", "silver", "chains", "hallmarking", "refiner"].map((t) => `/city/${ct.slug}/${t}`)), ...TOOLS.map((t) => `/tools/${t.slug}`), ...STATES.slice(0, 22).map((x) => `/state/${x.slug}`), ...CITIES.map((x) => `/city/${x.slug}`), ...TRADE_TYPES.map((t) => `/category/${t.slug}`)]);
+  if (file === "pages.xml") return xml(["/", "/directory", "/cities", "/pricing", "/rates", "/tools", "/states", "/categories", "/requirements", "/news", "/events", "/about", "/advertise", "/guides", ...["bis-hallmark-huid", "gst-on-gold-jewellery", "how-gold-jewellery-price-is-calculated", "995-vs-999-gold", "gold-weight-units", "import-duty-on-gold-silver"].map((g) => `/guides/${g}`), ...CITIES.flatMap((ct) => ["manufacturer", "wholesaler", "retailer", "bullion", "diamonds", "silver", "chains", "hallmarking", "refiner"].map((t) => `/city/${ct.slug}/${t}`)), ...TOOLS.map((t) => `/tools/${t.slug}`), ...STATES.slice(0, 22).map((x) => `/state/${x.slug}`), ...CITIES.map((x) => `/city/${x.slug}`), ...TRADE_TYPES.map((t) => `/category/${t.slug}`)]);
   const m = /^b-(\d{1,3})\.xml$/.exec(file);
   if (!m) return c.notFound();
   const i = parseInt(m[1]!, 10);

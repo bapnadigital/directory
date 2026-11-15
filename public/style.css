@@ -102,3 +102,4 @@ section+section{padding-top:22px}.biz .top img{object-fit:contain}
 .todo li{margin:6px 0}.todo .done{color:var(--muted);text-decoration:line-through}
 
 .only-wide{display:none}@media(min-width:760px){.only-wide{display:inline}}
+@media(max-width:560px){.g3.prods{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.prods .card.prod{padding:10px}.prods .prod h3{font-size:14px}.prods .prod .btn{padding:8px 6px;font-size:13px}.prods .prod .small,.prods .prod p{font-size:12px}}
