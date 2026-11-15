@@ -1,5 +1,6 @@
 /** @jsxImportSource hono/jsx */
 import { Hono, type Context } from "hono";
+import { recount } from "./reviews";
 import { type AppEnv, requireAdmin } from "../auth";
 import { PLACEMENTS, type Placement } from "./ads";
 import { DAILY_REVEALS, today } from "./contact";
@@ -38,7 +39,8 @@ admin.get("/", async (c) => {
   const lq = String(c.req.query("lq") ?? "").trim().slice(0, 80);
   const found = lq.length >= 3 ? (await db.prepare(`SELECT b.id, b.slug, b.name, b.city, b.source, b.plan, u.email AS owner, EXISTS (SELECT 1 FROM private_contacts p WHERE p.business_id = b.id) AS has_contact FROM businesses b LEFT JOIN users u ON u.id = b.owner_id WHERE b.name LIKE ?1 OR b.gst = ?2 OR b.slug = ?3 ORDER BY (b.owner_id IS NOT NULL) DESC, b.name LIMIT 15`).bind(`%${lq}%`, lq.toUpperCase(), lq.toLowerCase().replace(/^.*\/b\//, "")).all<{ id: number; slug: string; name: string; city: string | null; source: string; plan: string; owner: string | null; has_contact: number }>()).results : [];
   const revs = (await db.prepare(`SELECT r.id, r.rating, r.body, r.status, r.created_at, b.name AS bname, b.slug, u.name AS uname FROM reviews r JOIN businesses b ON b.id = r.business_id JOIN users u ON u.id = r.user_id ORDER BY r.created_at DESC LIMIT 20`).all<{ id: number; rating: number; body: string | null; status: string; created_at: number; bname: string; slug: string; uname: string }>()).results;
-  const reqs = (await db.prepare(`SELECT id, title, city, name, phone, status, views, created_at FROM requests ORDER BY created_at DESC LIMIT 30`).all<{ id: number; title: string; city: string | null; name: string; phone: string; status: string; views: number; created_at: number }>()).results;
+  const mailStats = await db.prepare(`SELECT (SELECT count(*) FROM rate_subs WHERE confirmed = 1) AS subs, (SELECT count(*) FROM rate_alerts WHERE fired_at IS NULL) AS alerts`).first<{ subs: number; alerts: number }>();
+  const reqs = (await db.prepare(`SELECT id, title, city, name, phone, status, views, created_at, kind FROM requests ORDER BY created_at DESC LIMIT 30`).all<{ id: number; title: string; city: string | null; name: string; phone: string; status: string; views: number; created_at: number }>()).results;
   const banners = (await db.prepare(`SELECT id, title, url, image_id, placement, active, ends_at, views, clicks FROM banners ORDER BY placement, position, id DESC LIMIT 100`).all<{ id: number; title: string; url: string; image_id: number | null; placement: string; active: number; ends_at: number | null; views: number; clicks: number }>()).results;
   return page(c, { title: "Admin", noindex: true }, (
     <main class="wrap" style="padding-top:24px">
@@ -95,9 +97,10 @@ admin.get("/", async (c) => {
           {viewers.map((v) => <tr><td>{v.name}<div class="tiny muted">{v.email}</div></td><td>{v.n} of {DAILY_REVEALS}</td><td>{v.total}</td></tr>)}</table></div>}
       </section>
       <section>
-        <h2 style="font-size:20px;margin-bottom:10px">Buy requirements ({reqs.length} recent)</h2>
-        {reqs.length === 0 ? <div class="card small muted">None posted yet.</div> : <div class="card"><table><tr><th>Requirement</th><th>Buyer</th><th>Views</th><th></th></tr>
-          {reqs.map((r) => <tr><td style="white-space:normal"><a class="gold" href={`/requirements/${r.id}`} target="_blank">{r.title}</a><div class="tiny muted">{r.city} · {when(r.created_at)} · {r.status}</div></td><td>{r.name}<div class="tiny muted">{r.phone}</div></td><td>{r.views}</td>
+        <h2 style="font-size:20px;margin-bottom:10px">Trade board posts ({reqs.length} recent)</h2>
+        <p class="small muted">Daily rate email: {mailStats?.subs ?? 0} confirmed subscribers · {mailStats?.alerts ?? 0} open rate alerts</p>
+        {reqs.length === 0 ? <div class="card small muted">None posted yet.</div> : <div class="card"><table><tr><th>Post</th><th>Posted by</th><th>Views</th><th></th></tr>
+          {reqs.map((r) => <tr><td style="white-space:normal"><a class="gold" href={`/requirements/${r.id}`} target="_blank">{r.title}</a><div class="tiny muted">{(r as { kind?: string }).kind ?? "buy"} · {r.city} · {when(r.created_at)} · {r.status}</div></td><td>{r.name}<div class="tiny muted">{r.phone}</div></td><td>{r.views}</td>
             <td><form method="post" action={`/admin/requests/${r.id}/${r.status === "hidden" ? "open" : "hidden"}`}><button class="btn ghost sm" type="submit">{r.status === "hidden" ? "Show" : "Hide"}</button></form></td></tr>)}</table></div>}
       </section>
       <section>
@@ -193,7 +196,10 @@ admin.post("/events", async (c) => {
 });
 admin.post("/events/:id/delete", async (c) => { await c.env.DB.prepare(`DELETE FROM events WHERE id = ?`).bind(Number(c.req.param("id"))).run(); return back(c, "Event deleted"); });
 admin.post("/reviews/:id/:action{live|hidden}", async (c) => {
-  await c.env.DB.prepare(`UPDATE reviews SET status = ? WHERE id = ?`).bind(c.req.param("action"), Number(c.req.param("id"))).run();
+  const id = Number(c.req.param("id"));
+  await c.env.DB.prepare(`UPDATE reviews SET status = ? WHERE id = ?`).bind(c.req.param("action"), id).run();
+  const rv = await c.env.DB.prepare(`SELECT business_id FROM reviews WHERE id = ?`).bind(id).first<{ business_id: number }>();
+  if (rv) await recount(c.env.DB, rv.business_id);
   return back(c, "Review updated");
 });
 admin.post("/listings/:id/:action{hide-contact|release|delete}", async (c) => {

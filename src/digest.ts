@@ -18,6 +18,6 @@ export async function weeklyDigest(env: Env): Promise<void> {
   const base = env.SITE_URL.replace(/\/$/, "");
   const list = reqs.map((r) => `• ${r.title}${r.qty ? ` (${r.qty})` : ""}${r.city ? `, ${r.city}` : ""}\n  ${base}/requirements/${r.id}`).join("\n");
   for (const o of owners) {
-    await sendMail(env, base, o.email, `${reqs.length} new buy requirements this week`, `Hello ${o.name},\n\nBuyers posted these requirements on ${env.BRAND_NAME} this week. Sign in to see each buyer's name and number.\n\n${list}\n\nAll open requirements: ${base}/requirements\n\nTo stop these weekly emails: ${base}/unsubscribe?u=${o.id}&t=${await digestToken(o.id, o.pass_salt)}`);
+    await sendMail(env, base, o.email, `${reqs.length} new posts on the trade board this week`, `Hello ${o.name},\n\nThe trade posted these requirements, offers and jobs on ${env.BRAND_NAME} this week. Sign in to see each name and number.\n\n${list}\n\nAll open requirements: ${base}/requirements\n\nTo stop these weekly emails: ${base}/unsubscribe?u=${o.id}&t=${await digestToken(o.id, o.pass_salt)}`);
   }
 }

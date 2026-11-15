@@ -15,7 +15,7 @@ export type Env = {
   CASHFREE_ENV?: string;
 };
 
-const SCHEMA_VERSION = "14";
+const SCHEMA_VERSION = "15";
 
 const SCHEMA: string[] = [
   `CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
@@ -114,7 +114,7 @@ const SCHEMA: string[] = [
   `CREATE TABLE IF NOT EXISTS rate_history (ts INTEGER PRIMARY KEY, gold995gst REAL, silver_gst REAL, gold_usd REAL, usd_inr REAL)`,
 ];
 
-const ALTERS = [`ALTER TABLE businesses ADD COLUMN state TEXT`, `ALTER TABLE users ADD COLUMN digest_off INTEGER NOT NULL DEFAULT 0`, `ALTER TABLE requests ADD COLUMN kind TEXT NOT NULL DEFAULT 'buy'`];
+const ALTERS = [`ALTER TABLE businesses ADD COLUMN state TEXT`, `ALTER TABLE users ADD COLUMN digest_off INTEGER NOT NULL DEFAULT 0`, `ALTER TABLE requests ADD COLUMN kind TEXT NOT NULL DEFAULT 'buy'`, `ALTER TABLE businesses ADD COLUMN rating_avg REAL`, `ALTER TABLE businesses ADD COLUMN rating_count INTEGER NOT NULL DEFAULT 0`];
 
 let ready: Promise<void> | null = null;
 

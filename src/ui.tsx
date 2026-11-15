@@ -90,7 +90,7 @@ export function page(c: Context<AppEnv>, o: PageOpts, body: Child) {
   );
 }
 
-export type Card = Pick<Business, "id" | "slug" | "name" | "city" | "owner_id" | "plan" | "plan_expires" | "logo_image" | "gst"> & { types?: string | null };
+export type Card = Pick<Business, "id" | "slug" | "name" | "city" | "owner_id" | "plan" | "plan_expires" | "logo_image" | "gst"> & { types?: string | null; rating_avg?: number | null; rating_count?: number | null };
 
 export function BizCard({ b }: { b: Card }) {
   const premium = isPremium(b);
@@ -102,6 +102,7 @@ export function BizCard({ b }: { b: Card }) {
       <div class="small muted">📍 {b.city || "India"}</div>
       <div class="row" style="margin-top:10px;gap:6px">
         {premium && <span class="badge gold">★ Featured</span>}
+        {b.rating_count ? <span class="badge soft">★ {(b.rating_avg ?? 0).toFixed(1)} ({b.rating_count})</span> : null}
         {b.owner_id ? <span class="badge ok">✓ Claimed</span> : b.gst ? <span class="badge soft">GST listed</span> : null}
         {types.map((t) => <span class="badge">{findType(t)?.label ?? t}</span>)}
       </div>

@@ -17,7 +17,7 @@ import { BizCard, type Card, Field, Flash, page, siteUrl } from "../ui";
 
 export const pub = new Hono<AppEnv>();
 
-const CARD_COLS = `b.id, b.slug, b.name, b.city, b.owner_id, b.plan, b.plan_expires, b.logo_image, b.gst,
+const CARD_COLS = `b.id, b.slug, b.name, b.city, b.owner_id, b.plan, b.plan_expires, b.logo_image, b.gst, b.rating_avg, b.rating_count,
   (SELECT group_concat(type) FROM business_types t WHERE t.business_id = b.id) AS types`;
 const ORDER = `ORDER BY (b.plan = 'premium' AND (b.plan_expires IS NULL OR b.plan_expires > strftime('%s','now'))) DESC,
   (b.owner_id IS NOT NULL) DESC, b.created_at DESC, b.id DESC`;
@@ -48,7 +48,7 @@ function where(f: Filters): { sql: string; args: unknown[] } {
 async function search(db: D1Database, f: Filters, pageNo: number) {
   const w = where(f);
   const [rows, count] = await Promise.all([
-    db.prepare(`SELECT ${CARD_COLS} FROM businesses b ${w.sql} ${f.sort === "name" ? "ORDER BY b.name COLLATE NOCASE, b.id" : f.sort === "views" ? "ORDER BY b.views DESC, b.id" : ORDER} LIMIT ? OFFSET ?`)
+    db.prepare(`SELECT ${CARD_COLS} FROM businesses b ${w.sql} ${f.sort === "name" ? "ORDER BY b.name COLLATE NOCASE, b.id" : f.sort === "views" ? "ORDER BY b.views DESC, b.id" : f.sort === "rated" ? "ORDER BY b.rating_count > 0 DESC, b.rating_avg DESC, b.rating_count DESC, b.id" : ORDER} LIMIT ? OFFSET ?`)
       .bind(...w.args, PAGE_SIZE, (pageNo - 1) * PAGE_SIZE).all<Card>(),
     db.prepare(`SELECT count(*) AS n FROM businesses b ${w.sql}`).bind(...w.args).first<{ n: number }>(),
   ]);
@@ -204,7 +204,7 @@ function listing(title: string, sub: string, basePath: string, f: Filters, pageN
         <aside class="card">
           <form method="get" action={basePath}>
             <label>Search<input name="q" value={f.q ?? ""} placeholder="Name, GSTIN or city" /></label>
-            <label>Sort by<select name="sort" data-autosubmit><option value="">Featured and claimed first</option><option value="name" selected={f.sort === "name"}>Name A to Z</option><option value="views" selected={f.sort === "views"}>Most viewed</option></select></label>
+            <label>Sort by<select name="sort" data-autosubmit><option value="">Featured and claimed first</option><option value="name" selected={f.sort === "name"}>Name A to Z</option><option value="views" selected={f.sort === "views"}>Most viewed</option><option value="rated" selected={f.sort === "rated"}>Top rated</option></select></label>
             {showFilters && (
               <details class="flt" open={!!(f.city || f.type || f.state || f.claimed)}><summary class="small gold">Filter by city, state or type</summary>
                 <label style="margin-top:10px">City
@@ -245,7 +245,7 @@ function listing(title: string, sub: string, basePath: string, f: Filters, pageN
 const pageNum = (v?: string) => Math.min(2000, Math.max(1, parseInt(v ?? "1", 10) || 1));
 
 pub.get("/directory", async (c) => {
-  const f: Filters = { q: c.req.query("q"), city: findCity(c.req.query("city"))?.slug, type: findType(c.req.query("type"))?.slug, claimed: c.req.query("claimed") === "1", sort: ["name", "views"].includes(c.req.query("sort") ?? "") ? c.req.query("sort") : undefined, state: findState(c.req.query("state"))?.label };
+  const f: Filters = { q: c.req.query("q"), city: findCity(c.req.query("city"))?.slug, type: findType(c.req.query("type"))?.slug, claimed: c.req.query("claimed") === "1", sort: ["name", "views", "rated"].includes(c.req.query("sort") ?? "") ? c.req.query("sort") : undefined, state: findState(c.req.query("state"))?.label };
   const p = pageNum(c.req.query("page"));
   const data = await search(c.env.DB, f, p);
   const filtered = !!(f.q || f.city || f.type || f.claimed || f.state || f.sort || p > 1);
@@ -261,7 +261,7 @@ pub.get("/city/:slug", async (c) => {
     if (!row || !row.city || row.n < 1) return c.notFound();
     city = { slug, label: row.city, note: row.state ?? "India" };
   }
-  const f: Filters = { q: c.req.query("q"), city: city.slug, claimed: c.req.query("claimed") === "1", sort: ["name", "views"].includes(c.req.query("sort") ?? "") ? c.req.query("sort") : undefined };
+  const f: Filters = { q: c.req.query("q"), city: city.slug, claimed: c.req.query("claimed") === "1", sort: ["name", "views", "rated"].includes(c.req.query("sort") ?? "") ? c.req.query("sort") : undefined };
   const p = pageNum(c.req.query("page"));
   const data = await search(c.env.DB, f, p);
   return page(c, {
@@ -290,7 +290,7 @@ pub.get("/city/:slug/:type", async (c) => {
 pub.get("/category/:slug", async (c) => {
   const t = findType(c.req.param("slug"));
   if (!t) return c.notFound();
-  const f: Filters = { q: c.req.query("q"), type: t.slug, claimed: c.req.query("claimed") === "1", sort: ["name", "views"].includes(c.req.query("sort") ?? "") ? c.req.query("sort") : undefined };
+  const f: Filters = { q: c.req.query("q"), type: t.slug, claimed: c.req.query("claimed") === "1", sort: ["name", "views", "rated"].includes(c.req.query("sort") ?? "") ? c.req.query("sort") : undefined };
   const p = pageNum(c.req.query("page"));
   const data = await search(c.env.DB, f, p);
   return page(c, { title: `${t.label} — jewellery trade directory`, desc: `Find ${t.label.toLowerCase()} in the Indian jewellery trade. ${data.total.toLocaleString("en-IN")} businesses listed.`, path: `/category/${t.slug}`, noindex: p > 1 || !!f.q },
@@ -323,7 +323,7 @@ pub.get("/states", async (c) => {
 pub.get("/state/:slug", async (c) => {
   const st = findState(c.req.param("slug"));
   if (!st) return c.notFound();
-  const f: Filters = { q: c.req.query("q"), state: st.label, claimed: c.req.query("claimed") === "1", sort: ["name", "views"].includes(c.req.query("sort") ?? "") ? c.req.query("sort") : undefined };
+  const f: Filters = { q: c.req.query("q"), state: st.label, claimed: c.req.query("claimed") === "1", sort: ["name", "views", "rated"].includes(c.req.query("sort") ?? "") ? c.req.query("sort") : undefined };
   const p = pageNum(c.req.query("page"));
   const data = await search(c.env.DB, f, p);
   return page(c, {

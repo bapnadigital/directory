@@ -14,6 +14,8 @@ export type Review = { id: number; rating: number; body: string | null; reply: s
 const s = (v: unknown, n: number) => String(v ?? "").trim().slice(0, n);
 export const stars = (n: number) => "★★★★★".slice(0, Math.round(n)) + "☆☆☆☆☆".slice(0, 5 - Math.round(n));
 
+export const recount = (db: D1Database, businessId: number) => db.prepare(`UPDATE businesses SET rating_count = (SELECT count(*) FROM reviews WHERE business_id = ?1 AND status = 'live'), rating_avg = (SELECT avg(rating) FROM reviews WHERE business_id = ?1 AND status = 'live') WHERE id = ?1`).bind(businessId).run();
+
 export async function loadReviews(db: D1Database, businessId: number) {
   const rows = (await db.prepare(`SELECT r.id, r.rating, r.body, r.reply, r.created_at, r.user_id, u.name AS uname FROM reviews r JOIN users u ON u.id = r.user_id WHERE r.business_id = ? AND r.status = 'live' ORDER BY r.created_at DESC LIMIT 30`).bind(businessId).all<Review>()).results;
   const agg = await db.prepare(`SELECT count(*) AS n, avg(rating) AS a FROM reviews WHERE business_id = ? AND status = 'live'`).bind(businessId).first<{ n: number; a: number | null }>();
@@ -67,6 +69,7 @@ reviews.post("/b/:slug/review", async (c) => {
   if (!(await allow(c.env, `rev:${u.id}`, 6, 86400))) return back("rerr", "You have posted several reviews today. Please try again tomorrow.");
   await c.env.DB.prepare(`INSERT INTO reviews (business_id, user_id, rating, body, created_at) VALUES (?, ?, ?, ?, ?)
     ON CONFLICT (business_id, user_id) DO UPDATE SET rating = excluded.rating, body = excluded.body, created_at = excluded.created_at, status = 'live'`).bind(b.id, u.id, rating, body || null, now()).run();
+  await recount(c.env.DB, b.id);
   const reqUrl = c.req.url, base = siteUrl(c);
   c.executionCtx.waitUntil((async () => {
     const o = await c.env.DB.prepare(`SELECT email FROM users WHERE id = ?`).bind(b.owner_id).first<{ email: string }>();

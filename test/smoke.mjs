@@ -138,5 +138,6 @@ r = await other("/rates/alerts", { method: "POST", form: { metal: "gold", dir: "
 r = await other("/rates"); ok("rate alert listed for its owner", r.text.includes("1,20,000"));
 r = await anon("/rates"); ok("rate alerts private", !r.text.includes("1,20,000") && r.text.includes("Sign in</a> to set a rate alert"));
 r = await other("/rates/alerts", { method: "POST", form: { metal: "tin", dir: "below", target: "5" } }); ok("rate alert validation", r.loc.includes("aerr="));
+r = await anon("/directory?sort=rated"); ok("top rated sort shows rating on card", r.status === 200 && /★ 5\.0 \(1\)/.test(r.text) && r.text.indexOf("Test Gold Jewellers") < r.text.indexOf("Sparkle Diam"));
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
