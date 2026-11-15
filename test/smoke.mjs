@@ -122,5 +122,11 @@ r = await other("/admin/listings/1/delete", { method: "POST" }); ok("non-admin c
 r = await other("/b/sparkle-diam/save", { method: "POST" }); r = await other("/saved"); ok("save listing to shortlist", r.text.includes("Sparkle Diam"));
 r = await other("/b/sparkle-diam/save", { method: "POST" }); r = await other("/saved"); ok("unsave listing", !r.text.includes("Sparkle Diam"));
 r = await anon("/saved"); ok("saved needs sign-in", r.status === 302);
+r = await anon("/requirements/new", { method: "POST", form: { kind: "hire", title: "Hiring CAD designer for gold", city: "Rajkot", name: "Hr Person", phone: "9811111111" } });
+const jobPath = r.loc.split("?")[0].replace(BASE, "");
+r = await anon("/requirements?kind=hire"); ok("job post listed under Jobs", r.text.includes("Hiring CAD designer"));
+r = await anon("/requirements?kind=sell"); ok("kind filter excludes others", !r.text.includes("Hiring CAD designer"));
+r = await anon(jobPath); ok("job contact hidden from public", !r.text.includes("9811111111") && r.text.includes("Employer contact"));
+r = await other(jobPath); ok("job contact shown to any signed-in member", r.text.includes("9811111111"));
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
