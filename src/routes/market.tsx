@@ -4,6 +4,7 @@ import type { Context } from "hono";
 import { type AppEnv, clientIp } from "../auth";
 import { TRADE_TYPES, findType, safeUrl } from "../content";
 import { allow, now } from "../db";
+import { digestToken } from "../digest";
 import { Field, Flash, page } from "../ui";
 
 // Buy requirements board and industry news.
@@ -148,5 +149,15 @@ market.get("/events", async (c) => {
         <div class="stack" style="margin-top:14px">{rows.map((e) => <div class="card"><b>{e.title}</b><div class="small muted" style="margin-top:4px">📅 {day(e.starts_on)}{e.ends_on && e.ends_on !== e.starts_on ? ` to ${day(e.ends_on)}` : ""}{e.venue || e.city ? ` · 📍 ${[e.venue, e.city].filter(Boolean).join(", ")}` : ""}</div>{e.details && <p class="small" style="white-space:pre-line">{e.details}</p>}{safeUrl(e.url) && <a class="gold small" href={safeUrl(e.url)!} target="_blank" rel="nofollow noopener">Organiser's website →</a>}</div>)}</div>
       )}
     </main>
+  ));
+});
+
+market.get("/unsubscribe", async (c) => {
+  const id = Number(c.req.query("u")), t = c.req.query("t") ?? "";
+  const u = Number.isInteger(id) ? await c.env.DB.prepare(`SELECT id, pass_salt FROM users WHERE id = ?`).bind(id).first<{ id: number; pass_salt: string }>() : null;
+  const ok = !!u && t.length === 24 && t === (await digestToken(u.id, u.pass_salt));
+  if (ok) await c.env.DB.prepare(`UPDATE users SET digest_off = 1 WHERE id = ?`).bind(id).run();
+  return page(c, { title: "Email preferences", noindex: true }, (
+    <main class="wrap narrow center" style="padding-top:60px"><div class="card"><h1 style="font-size:22px">{ok ? "You are unsubscribed" : "This link is not valid"}</h1><p class="muted small">{ok ? "You will no longer receive the weekly buy requirements email. Enquiry alerts for your own listing still reach you." : "Please use the link from the most recent email."}</p><a class="btn" href="/">Back to the site</a></div></main>
   ));
 });

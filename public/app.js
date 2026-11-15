@@ -34,3 +34,6 @@ document.addEventListener("change", function (e) {
   };
   img.src = url;
 });
+
+// Filters open by default on wide screens.
+if (window.innerWidth > 900) document.querySelectorAll("details.flt").forEach(function (d) { d.open = true; });

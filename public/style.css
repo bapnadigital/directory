@@ -71,3 +71,7 @@ section+section{padding-top:8px}
 @media(max-width:560px){.subnav{display:flex;gap:6px;overflow-x:auto;padding:8px 12px;border-bottom:1px solid var(--border);white-space:nowrap;-webkit-overflow-scrolling:touch;scrollbar-width:none}.subnav::-webkit-scrollbar{display:none}
 .subnav a{flex:none;font-size:13px;color:var(--muted);padding:5px 11px;border:1px solid var(--border);border-radius:999px}nav.main a:not(.btn){display:none}}
 .ad.house{position:relative}.ad.house .ad-tag{position:absolute;right:10px;left:auto}
+details.flt{margin-bottom:12px}details.flt summary{cursor:pointer;font-weight:600}
+@media(max-width:560px){a.card.biz{display:grid!important;grid-template-columns:56px minmax(0,1fr);column-gap:12px;align-items:start;padding:12px}a.card.biz .top{grid-row:1 / span 3;grid-column:1;width:56px;height:56px;margin:0;font-size:18px;border-radius:14px}a.card.biz>*:not(.top){grid-column:2}a.card.biz .row{margin-top:6px!important}
+.g5{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:8px}.tile{padding:12px 4px}.tile .ic{width:40px;height:40px;font-size:19px;margin-bottom:6px}.tile b{font-size:12px}
+.hero{padding:34px 0 22px}section{padding:20px 0}}

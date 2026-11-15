@@ -20,7 +20,7 @@ const ORDER = `ORDER BY (b.plan = 'premium' AND (b.plan_expires IS NULL OR b.pla
   (b.owner_id IS NOT NULL) DESC, b.created_at DESC, b.id DESC`;
 const PAGE_SIZE = 24;
 
-type Filters = { q?: string; city?: string; type?: string; claimed?: boolean; state?: string };
+type Filters = { q?: string; city?: string; type?: string; claimed?: boolean; state?: string; sort?: string };
 
 function where(f: Filters): { sql: string; args: unknown[] } {
   const parts: string[] = [];
@@ -44,7 +44,7 @@ function where(f: Filters): { sql: string; args: unknown[] } {
 async function search(db: D1Database, f: Filters, pageNo: number) {
   const w = where(f);
   const [rows, count] = await Promise.all([
-    db.prepare(`SELECT ${CARD_COLS} FROM businesses b ${w.sql} ${ORDER} LIMIT ? OFFSET ?`)
+    db.prepare(`SELECT ${CARD_COLS} FROM businesses b ${w.sql} ${f.sort === "name" ? "ORDER BY b.name COLLATE NOCASE, b.id" : f.sort === "views" ? "ORDER BY b.views DESC, b.id" : ORDER} LIMIT ? OFFSET ?`)
       .bind(...w.args, PAGE_SIZE, (pageNo - 1) * PAGE_SIZE).all<Card>(),
     db.prepare(`SELECT count(*) AS n FROM businesses b ${w.sql}`).bind(...w.args).first<{ n: number }>(),
   ]);
@@ -158,6 +158,7 @@ function listing(title: string, sub: string, basePath: string, f: Filters, pageN
     if (showFilters && f.type) u.set("type", f.type);
     if (showFilters && f.state) u.set("state", STATES.find((s) => s.label === f.state)?.slug ?? "");
     if (f.claimed) u.set("claimed", "1");
+    if (f.sort) u.set("sort", f.sort);
     if (p > 1) u.set("page", String(p));
     const s = u.toString();
     return s ? `${basePath}?${s}` : basePath;
@@ -171,9 +172,10 @@ function listing(title: string, sub: string, basePath: string, f: Filters, pageN
         <aside class="card">
           <form method="get" action={basePath}>
             <label>Search<input name="q" value={f.q ?? ""} placeholder="Name, GSTIN or city" /></label>
+            <label>Sort by<select name="sort" data-autosubmit><option value="">Featured and claimed first</option><option value="name" selected={f.sort === "name"}>Name A to Z</option><option value="views" selected={f.sort === "views"}>Most viewed</option></select></label>
             {showFilters && (
-              <>
-                <label>City
+              <details class="flt" open={!!(f.city || f.type || f.state || f.claimed)}><summary class="small gold">Filter by city, state or type</summary>
+                <label style="margin-top:10px">City
                   <select name="city"><option value="">All cities</option>{CITIES.map((ct) => <option value={ct.slug} selected={f.city === ct.slug}>{ct.label}</option>)}</select>
                 </label>
                 <label>State
@@ -182,9 +184,10 @@ function listing(title: string, sub: string, basePath: string, f: Filters, pageN
                 <label>Business type
                   <select name="type"><option value="">All types</option>{TRADE_TYPES.map((t) => <option value={t.slug} selected={f.type === t.slug}>{t.label}</option>)}</select>
                 </label>
-              </>
+                <label class="row"><input type="checkbox" name="claimed" value="1" checked={!!f.claimed} /> Claimed by owner</label>
+              </details>
             )}
-            <label class="row"><input type="checkbox" name="claimed" value="1" checked={!!f.claimed} /> Claimed by owner</label>
+            {!showFilters && <label class="row"><input type="checkbox" name="claimed" value="1" checked={!!f.claimed} /> Claimed by owner</label>}
             <button class="btn block" type="submit">Apply</button>
             <a class="small muted center" style="display:block;margin-top:10px" href={basePath}>Clear filters</a>
           </form>
@@ -210,10 +213,10 @@ function listing(title: string, sub: string, basePath: string, f: Filters, pageN
 const pageNum = (v?: string) => Math.min(2000, Math.max(1, parseInt(v ?? "1", 10) || 1));
 
 pub.get("/directory", async (c) => {
-  const f: Filters = { q: c.req.query("q"), city: findCity(c.req.query("city"))?.slug, type: findType(c.req.query("type"))?.slug, claimed: c.req.query("claimed") === "1", state: findState(c.req.query("state"))?.label };
+  const f: Filters = { q: c.req.query("q"), city: findCity(c.req.query("city"))?.slug, type: findType(c.req.query("type"))?.slug, claimed: c.req.query("claimed") === "1", sort: ["name", "views"].includes(c.req.query("sort") ?? "") ? c.req.query("sort") : undefined, state: findState(c.req.query("state"))?.label };
   const p = pageNum(c.req.query("page"));
   const data = await search(c.env.DB, f, p);
-  const filtered = !!(f.q || f.city || f.type || f.claimed || f.state || p > 1);
+  const filtered = !!(f.q || f.city || f.type || f.claimed || f.state || f.sort || p > 1);
   return page(c, { title: "Jewellery business directory", desc: "Search jewellery manufacturers, wholesalers, retailers and bullion dealers across India.", path: "/directory", noindex: filtered },
     listing("Jewellery directory", "Free to search, no sign-in needed.", "/directory", f, p, data, true, c));
 });
@@ -226,13 +229,13 @@ pub.get("/city/:slug", async (c) => {
     if (!row || !row.city || row.n < 1) return c.notFound();
     city = { slug, label: row.city, note: row.state ?? "India" };
   }
-  const f: Filters = { q: c.req.query("q"), city: city.slug, claimed: c.req.query("claimed") === "1" };
+  const f: Filters = { q: c.req.query("q"), city: city.slug, claimed: c.req.query("claimed") === "1", sort: ["name", "views"].includes(c.req.query("sort") ?? "") ? c.req.query("sort") : undefined };
   const p = pageNum(c.req.query("page"));
   const data = await search(c.env.DB, f, p);
   return page(c, {
     title: `Jewellers in ${city.label} — manufacturers, wholesalers, retailers`,
     desc: `${data.total.toLocaleString("en-IN")} jewellery businesses in ${city.label} (${city.note}). View catalogues and contact them directly.`,
-    path: `/city/${city.slug}`, noindex: p > 1 || !!f.q,
+    path: `/city/${city.slug}`, noindex: p > 1 || !!f.q || !!f.sort,
     jsonld: { "@context": "https://schema.org", "@type": "ItemList", name: `Jewellers in ${city.label}`, numberOfItems: data.total,
       itemListElement: data.rows.slice(0, 20).map((b, i) => ({ "@type": "ListItem", position: i + 1, name: b.name, url: `${siteUrl(c)}/b/${b.slug}` })) },
   }, listing(`Jewellers in ${city.label}`, city.note, `/city/${city.slug}`, f, p, data, false, c));
@@ -241,7 +244,7 @@ pub.get("/city/:slug", async (c) => {
 pub.get("/category/:slug", async (c) => {
   const t = findType(c.req.param("slug"));
   if (!t) return c.notFound();
-  const f: Filters = { q: c.req.query("q"), type: t.slug, claimed: c.req.query("claimed") === "1" };
+  const f: Filters = { q: c.req.query("q"), type: t.slug, claimed: c.req.query("claimed") === "1", sort: ["name", "views"].includes(c.req.query("sort") ?? "") ? c.req.query("sort") : undefined };
   const p = pageNum(c.req.query("page"));
   const data = await search(c.env.DB, f, p);
   return page(c, { title: `${t.label} — jewellery trade directory`, desc: `Find ${t.label.toLowerCase()} in the Indian jewellery trade. ${data.total.toLocaleString("en-IN")} businesses listed.`, path: `/category/${t.slug}`, noindex: p > 1 || !!f.q },
@@ -274,13 +277,13 @@ pub.get("/states", async (c) => {
 pub.get("/state/:slug", async (c) => {
   const st = findState(c.req.param("slug"));
   if (!st) return c.notFound();
-  const f: Filters = { q: c.req.query("q"), state: st.label, claimed: c.req.query("claimed") === "1" };
+  const f: Filters = { q: c.req.query("q"), state: st.label, claimed: c.req.query("claimed") === "1", sort: ["name", "views"].includes(c.req.query("sort") ?? "") ? c.req.query("sort") : undefined };
   const p = pageNum(c.req.query("page"));
   const data = await search(c.env.DB, f, p);
   return page(c, {
     title: `Jewellers in ${st.label} — manufacturers, wholesalers, bullion dealers, retailers`,
     desc: `${data.total.toLocaleString("en-IN")} jewellery businesses in ${st.label}. Search by name or city, view catalogues and send enquiries.`,
-    path: `/state/${st.slug}`, noindex: p > 1 || !!f.q,
+    path: `/state/${st.slug}`, noindex: p > 1 || !!f.q || !!f.sort,
   }, listing(`Jewellers in ${st.label}`, "All listed jewellery and allied businesses in the state.", `/state/${st.slug}`, f, p, data, false, c));
 });
 
@@ -425,13 +428,6 @@ pub.get("/b/:slug", async (c) => {
             </div>
           )}
 
-          {similar.length > 0 && (
-            <div><h2 style="font-size:20px;margin-bottom:12px">More jewellers in {b.city}</h2>
-              <div class="grid g3">{similar.map((s) => <BizCard b={s} />)}</div>
-              {b.city_slug && <p class="small" style="margin-top:10px"><a class="gold" href={`/city/${b.city_slug}`}>All businesses in {b.city} →</a></p>}
-            </div>
-          )}
-
           {!claimed && (
             <div class="band" style="padding:26px">
               <h2 style="font-size:22px">Is this your business?</h2>
@@ -495,6 +491,12 @@ pub.get("/b/:slug", async (c) => {
           </div>
         </aside>
       </div>
+      {similar.length > 0 && (
+        <div style="margin-top:22px"><h2 style="font-size:20px;margin-bottom:12px">More jewellers in {b.city}</h2>
+          <div class="grid g3">{similar.map((x) => <BizCard b={x} />)}</div>
+          {b.city_slug && <p class="small" style="margin-top:10px"><a class="gold" href={`/city/${b.city_slug}`}>All businesses in {b.city} →</a></p>}
+        </div>
+      )}
     </main>
   ));
 });
@@ -637,15 +639,22 @@ pub.get("/img/:id", async (c) => {
 pub.get("/pricing", (c) => page(c, { title: "Membership plans", desc: "Free and Premium membership for jewellery businesses: directory listing, digital catalogue, bio link and enquiries.", path: "/pricing" }, (
   <main class="wrap narrow" style="padding-top:36px;max-width:860px">
     <div class="center"><div class="eyebrow">Membership</div><h1 style="font-size:34px;margin:8px 0">Start free. Upgrade when it pays.</h1></div>
+    {c.req.query("need") === "contact" && <Flash err="Mobile numbers and emails of trade listings are a Premium benefit. Upgrade below to open up to 30 contacts a day." />}
     <div class="grid g2" style="margin-top:24px">
       <div class="card"><h2 style="font-size:20px">Free</h2><div class="stat"><b>₹0</b></div>
-        <ul class="small muted"><li>Claimed listing with contact buttons</li><li>Catalogue: {PLAN_LIMITS.free.products} products</li><li>Bio link with {PLAN_LIMITS.free.links} links + QR code</li><li>{PLAN_LIMITS.free.gallery} gallery photos, {PLAN_LIMITS.free.faqs} FAQs</li><li>Enquiry inbox</li></ul>
+        <ul class="small muted"><li>Claimed listing with contact buttons</li><li>Catalogue: {PLAN_LIMITS.free.products} products</li><li>Bio link with {PLAN_LIMITS.free.links} links + QR code</li><li>{PLAN_LIMITS.free.gallery} gallery photos, {PLAN_LIMITS.free.faqs} FAQs</li><li>Enquiry inbox with an email alert for every enquiry</li><li>See buyers' contacts on buy requirements</li><li>Free calculators and the live rate widget for your website</li></ul>
         <a class="btn ghost block" href="/signup">Get started</a></div>
       <div class="card" style="border-color:rgba(233,196,106,.6)"><h2 style="font-size:20px">Premium <span class="badge gold">★ Featured</span></h2>
         <div class="stat"><b>₹{PLANS.premium_monthly.amount.toLocaleString("en-IN")}<span class="small muted"> / month</span></b></div>
         <div class="small muted">or ₹{PLANS.premium_yearly.amount.toLocaleString("en-IN")} / year</div>
-        <ul class="small muted"><li>Featured badge and top placement in search, city and category pages</li><li>Catalogue: {PLAN_LIMITS.premium.products} products</li><li>Bio link with {PLAN_LIMITS.premium.links} links, no "Powered by"</li><li>{PLAN_LIMITS.premium.gallery} gallery photos, {PLAN_LIMITS.premium.offers} offers, {PLAN_LIMITS.premium.faqs} FAQs</li><li>Shown on the homepage</li><li>Mobile numbers and emails of 20,000+ trade listings: open up to 30 a day</li></ul>
+        <ul class="small muted"><li>Featured badge and top placement in search, city and category pages</li><li>Catalogue: {PLAN_LIMITS.premium.products} products</li><li>Bio link with {PLAN_LIMITS.premium.links} links, no "Powered by"</li><li>{PLAN_LIMITS.premium.gallery} gallery photos, {PLAN_LIMITS.premium.offers} offers, {PLAN_LIMITS.premium.faqs} FAQs</li><li>Shown on the homepage</li><li>Mobile numbers and emails of 20,000+ trade listings: open up to 30 a day</li><li>Everything in Free</li></ul>
         <a class="btn block" href="/dashboard/membership">Upgrade</a></div>
+    </div>
+    <div class="card" style="margin-top:16px"><h2 style="font-size:18px;margin-bottom:6px">Common questions</h2>
+      <details style="padding:8px 0;border-top:1px solid var(--border)"><summary>How do I get my listing?</summary><p class="small muted">Sign up, search for your business and claim it. If we have an email on record you can verify instantly with a code; otherwise upload your GST certificate and we approve it. Not listed yet? Add it as a new business.</p></details>
+      <details style="padding:8px 0;border-top:1px solid var(--border)"><summary>Who can see my phone number?</summary><p class="small muted">Once you claim your listing, the contact buttons you add are public so buyers can reach you. Numbers that came from trade directories are shown only to Premium members, one at a time.</p></details>
+      <details style="padding:8px 0;border-top:1px solid var(--border)"><summary>How do I pay for Premium?</summary><p class="small muted">Choose a plan from your dashboard. Your request reaches our team and Premium is switched on as soon as the payment is confirmed.</p></details>
+      <details style="padding:8px 0;border-top:1px solid var(--border)"><summary>Can I advertise on the site?</summary><p class="small muted">Yes. Banner and sponsor slots are available on the home page, directory pages and business pages. Write to us from your dashboard or reply to any of our emails.</p></details>
     </div>
   </main>
 )));

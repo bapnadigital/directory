@@ -49,7 +49,8 @@ r = await anon("/signup", { method: "POST", form: { name: "X Y", email: "bad", p
 
 // claim flow
 r = await owner("/dashboard/claim?q=Test+Gold"); ok("claim search finds business", r.text.includes("This is mine"));
-r = await owner("/dashboard/claim", { method: "POST", form: { b: "test-gold-jewellers", role: "Owner", phone: "9820000002", note: "hello" } }); ok("claim submitted", r.status === 303);
+r = await owner("/dashboard/claim", { method: "POST", form: { b: "test-gold-jewellers", role: "Owner", phone: "9820000002", note: "hello" } }); ok("claim without certificate refused", r.loc.includes("err="));
+r = await owner("/dashboard/claim", { method: "POST", multipart: { b: "test-gold-jewellers", role: "Owner", phone: "9820000002", note: "hello", doc: jpg() } }); ok("claim submitted with certificate", r.status === 303 && r.loc.includes("ok="), r.loc);
 r = await owner("/dashboard/products"); ok("no access before approval", r.text.includes("don't have a business listing") || r.text.includes("Set up your business"));
 if (isFirstRun) {
   r = await adminC("/admin"); const m = /\/admin\/claims\/(\d+)\/approve/.exec(r.text); ok("admin sees claim, owner name escaped", !!m && !r.text.includes("<script>alert(1)"));
@@ -67,7 +68,7 @@ if (isFirstRun) {
   r = await owner("/dashboard/extras", { method: "POST", multipart: { kind: "gallery", title: "Showroom", image: jpg() } }); ok("gallery photo added", r.loc.includes("ok="));
 
   r = await anon("/b/test-gold-jewellers");
-  ok("claimed listing shows contact, catalogue, FAQ, types", r.text.includes("wa.me/919820000002") && r.text.includes("22K Temple Necklace") && r.text.includes("custom designs") && r.text.includes("Manufacturers") && r.text.includes("Claimed by owner"));
+  ok("claimed listing shows contact, catalogue, FAQ, types", r.text.includes("wa.me/919820000002") && r.text.includes("22K Temple Necklace") && r.text.includes("custom designs") && r.text.includes("Manufacturers") && r.text.includes("Verified owner"));
   ok("HTML in about is escaped; js: website dropped", r.text.includes("&lt;b&gt;bold") && !r.text.includes("javascript:alert"));
   const img = /\/img\/(\d+)/.exec(r.text); r = await anon(img ? img[0] : "/img/0"); ok("image served", r.status === 200 && r.type === "image/jpeg");
   r = await anon("/b/test-gold-jewellers/catalogue"); ok("catalogue page", r.text.includes("Order on WhatsApp"));
@@ -100,5 +101,13 @@ if (isFirstRun) {
   r = await anon("/bio/test-gold-jewellers"); ok("premium bio has no powered-by", !r.text.includes("Powered by"));
   r = await owner("/logout", { method: "POST" }); r = await owner("/dashboard"); ok("logout works", r.status === 302);
 }
+// newer sections
+for (const u of ["/rates", "/api/rates", "/tools", "/tools/gold-price-calculator", "/tools/bullion-rate-converter", "/requirements", "/requirements/new", "/news", "/events", "/states", "/categories", "/cities", "/widget/rates", "/sitemap/pages.xml"]) {
+  r = await anon(u); ok(`GET ${u}`, r.status === 200, String(r.status));
+}
+r = await anon("/requirements/new", { method: "POST", form: { title: "Smoke test requirement 22K chains", city: "Mumbai", name: "Smoke", phone: "9800000000" } });
+ok("post requirement", r.status === 303 && /\/requirements\/\d+/.test(r.loc), r.loc);
+r = await anon(r.loc.split("?")[0].replace(BASE, "")); ok("requirement hides phone from public", r.status === 200 && !r.text.includes("9800000000"));
+r = await anon("/category/allied"); ok("allied category is not everything", r.status === 200);
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

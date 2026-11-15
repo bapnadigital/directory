@@ -12,7 +12,7 @@
   "observability": { "enabled": true },
   "vars": {
     "BRAND_NAME": "Jewellery Sahi Hai",
-    "SITE_URL": "",
+    "SITE_URL": "https://jewellerysahihai.com",
     // Public source for the one-time business import (public directory data only).
     "IMPORT_URL": "https://lnqjvvcgjriuarmznhix.supabase.co",
     // Public (browser) key of the old site; read-only public data.

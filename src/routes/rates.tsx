@@ -45,6 +45,11 @@ ratesApp.get("/rates", async (c) => {
   const base = siteUrl(c);
   const hist = (await c.env.DB.prepare(`SELECT ts, gold995gst, silver_gst FROM rate_history WHERE ts > ? ORDER BY ts`).bind(Math.floor(Date.now() / 1000) - 7 * 86400).all<{ ts: number; gold995gst: number | null; silver_gst: number | null }>()).results;
   const gp = hist.map((x) => x.gold995gst).filter((x): x is number => x != null), sp = hist.map((x) => x.silver_gst).filter((x): x is number => x != null);
+  const days = (await c.env.DB.prepare(`SELECT date(ts + 19800, 'unixepoch') AS d, min(gold995gst) AS glo, max(gold995gst) AS ghi, min(silver_gst) AS slo, max(silver_gst) AS shi,
+      (SELECT h2.gold995gst FROM rate_history h2 WHERE date(h2.ts + 19800, 'unixepoch') = date(h.ts + 19800, 'unixepoch') AND h2.gold995gst IS NOT NULL ORDER BY h2.ts DESC LIMIT 1) AS gclose,
+      (SELECT h2.silver_gst FROM rate_history h2 WHERE date(h2.ts + 19800, 'unixepoch') = date(h.ts + 19800, 'unixepoch') AND h2.silver_gst IS NOT NULL ORDER BY h2.ts DESC LIMIT 1) AS sclose
+    FROM rate_history h WHERE ts > ? GROUP BY d ORDER BY d DESC LIMIT 15`).bind(Math.floor(Date.now() / 1000) - 16 * 86400).all<{ d: string; glo: number | null; ghi: number | null; slo: number | null; shi: number | null; gclose: number | null; sclose: number | null }>()).results;
+  const dlabel = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-IN", { day: "numeric", month: "short", weekday: "short", timeZone: "UTC" });
   const chart = (title: string, pts: number[], unit: string) => pts.length >= 4 ? (
     <div class="card"><div class="row between"><b>{title}</b><span class="tiny muted">Low {inr(Math.min(...pts))} · High {inr(Math.max(...pts))} {unit}</span></div>
       <svg viewBox="0 0 600 120" preserveAspectRatio="none" style="width:100%;height:120px;margin-top:8px"><path d={spark(pts)} fill="none" stroke="#e9c46a" stroke-width="2" vector-effect="non-scaling-stroke" /></svg>
@@ -93,6 +98,18 @@ ratesApp.get("/rates", async (c) => {
       )}
 
       <div class="grid g2" style="margin-top:16px">{chart("Gold 995 with GST, per 10 g", gp, "")}{chart("Silver 999 with GST, per kg", sp, "")}</div>
+
+      {days.length > 0 && (
+        <div class="card" style="margin-top:16px">
+          <b>Day by day</b>
+          <table class="fit" style="margin-top:8px"><tr><th>Date</th><th>Gold last</th><th class="opt">Gold low – high</th><th>Silver last</th><th class="opt">Silver low – high</th></tr>
+            {days.map((d, i) => { const prev = days[i + 1]; const ch = prev?.gclose && d.gclose ? d.gclose - prev.gclose : null; return (
+              <tr><td>{dlabel(d.d)}</td><td><b>{inr(d.gclose)}</b>{ch != null && ch !== 0 ? <span class="tiny" style={`margin-left:6px;color:${ch > 0 ? "#34d399" : "#f87171"}`}>{ch > 0 ? "▲" : "▼"} {Math.abs(Math.round(ch)).toLocaleString("en-IN")}</span> : null}</td><td class="opt">{inr(d.glo)} – {inr(d.ghi)}</td><td><b>{inr(d.sclose)}</b></td><td class="opt">{inr(d.slo)} – {inr(d.shi)}</td></tr>
+            ); })}
+          </table>
+          <p class="tiny muted">Gold 995 with GST per 10 g and silver 999 with GST per kg. "Last" is the final rate recorded that day.</p>
+        </div>
+      )}
 
       <div class="band" style="margin-top:20px;padding:26px">
         <div class="eyebrow">Rate partner</div>

@@ -8,6 +8,7 @@ import { importJtBatch, tagAllied } from "./jt-import";
 import { snapshotRates } from "./rates";
 import { ratesApp } from "./routes/rates";
 import { toolsApp } from "./routes/tools";
+import { weeklyDigest } from "./digest";
 import { refreshNews } from "./news";
 import { market } from "./routes/market";
 import { ads } from "./routes/ads";
@@ -21,6 +22,12 @@ const importJtBatchDone = async (env: Env) => Number((await getMeta(env, "jt_chu
 
 const app = new Hono<AppEnv>();
 
+// One address for the site: send www visitors to the main domain.
+app.use("*", async (c, next) => {
+  const u = new URL(c.req.url);
+  if (u.hostname.startsWith("www.") && (c.req.method === "GET" || c.req.method === "HEAD")) { u.hostname = u.hostname.slice(4); return c.redirect(u.toString(), 301); }
+  await next();
+});
 const guarded = secureHeaders({ xFrameOptions: "DENY", referrerPolicy: "strict-origin-when-cross-origin" });
 const embeddable = secureHeaders({ xFrameOptions: false, referrerPolicy: "strict-origin-when-cross-origin" });
 app.use("*", (c, next) => (c.req.path.startsWith("/widget/") ? embeddable(c, next) : guarded(c, next)));
@@ -45,6 +52,7 @@ export default {
     ctx.waitUntil((async () => {
       await ensureSchema(env);
       try { await importBatch(env, 8); } catch (e) { console.error("import", e); }
+      try { await weeklyDigest(env); } catch (e) { console.error("digest", e); }
       try { await refreshNews(env); } catch (e) { console.error("news", e); }
       try { if ((await importJtBatchDone(env))) await tagAllied(env); } catch (e) { console.error("allied", e); }
       try { await snapshotRates(env); } catch (e) { console.error("rates", e); }
