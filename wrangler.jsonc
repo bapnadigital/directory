@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "jsh-directory",
+  "main": "src/index.tsx",
+  "compatibility_date": "2026-11-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": { "directory": "./public", "binding": "ASSETS" },
+  // No database_id on purpose: Cloudflare creates the database on first deploy.
+  "d1_databases": [{ "binding": "DB", "database_name": "jsh-directory" }],
+  "triggers": { "crons": ["*/2 * * * *"] },
+  "observability": { "enabled": true },
+  "vars": {
+    "BRAND_NAME": "Jewellery Sahi Hai",
+    "SITE_URL": "",
+    // Public source for the one-time business import (public directory data only).
+    "IMPORT_URL": "https://lnqjvvcgjriuarmznhix.supabase.co",
+    // Public (browser) key of the old site; read-only public data.
+    "IMPORT_KEY": "sb_publishable_zi1MEMJ_VQogl37nWbRp8A_qVIuuZ0W"
+  }
+}

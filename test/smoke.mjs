@@ -1,0 +1,104 @@
+// End-to-end smoke test against a local dev server:  npx wrangler dev --port 8799  then  node test/smoke.mjs
+const BASE = process.env.BASE || "http://localhost:8799";
+let pass = 0, fail = 0;
+const ok = (name, cond, extra = "") => { cond ? pass++ : fail++; console.log(`${cond ? "PASS" : "FAIL"}  ${name}${cond ? "" : "  " + extra}`); };
+
+function client() {
+  let cookie = "";
+  return async function req(path, { method = "GET", form, multipart, origin = BASE } = {}) {
+    const headers = { cookie };
+    if (method !== "GET" && origin) headers.origin = origin;
+    let body;
+    if (form) { body = new URLSearchParams(form); }
+    if (multipart) { body = new FormData(); for (const [k, v] of Object.entries(multipart)) Array.isArray(v) ? v.forEach((x) => body.append(k, x)) : body.append(k, v); }
+    const res = await fetch(BASE + path, { method, headers, body, redirect: "manual" });
+    const sc = res.headers.getSetCookie?.() ?? [];
+    for (const c of sc) { const [kv] = c.split(";"); if (kv.startsWith("sid=")) cookie = kv.endsWith("=") ? "" : kv; }
+    return { status: res.status, loc: res.headers.get("location") ?? "", text: await res.text(), type: res.headers.get("content-type") ?? "" };
+  };
+}
+// 1x1 JPEG
+const JPEG = Uint8Array.from(atob("/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkICQkKDA8MCgsOCwkJDRENDg8QEBEQCgwSExIQEw8QEBD/yQALCAABAAEBAREA/8wABgAQEAX/2gAIAQEAAD8A0s8g/9k="), (c) => c.charCodeAt(0));
+const jpg = () => new File([JPEG], "p.jpg", { type: "image/jpeg" });
+
+const anon = client(), adminC = client(), owner = client(), other = client();
+const uniq = Date.now().toString(36);
+
+let r = await anon("/"); ok("home page", r.status === 200 && r.text.includes("Find the right jeweller"));
+r = await anon("/directory"); ok("directory lists seeded businesses", r.status === 200 && r.text.includes("Test Gold Jewellers"));
+r = await anon("/directory?q=diam"); ok("search filters", r.text.includes("Sparkle Diam") && !r.text.includes("Test Gold Jewellers"));
+r = await anon("/city/mumbai"); ok("city page", r.status === 200 && r.text.includes("Jewellers in Mumbai"));
+r = await anon("/category/diamonds"); ok("category page (keyword match)", r.status === 200 && r.text.includes("Sparkle Diam"));
+r = await anon("/b/test-gold-jewellers"); ok("unclaimed listing hides contact + shows claim", r.status === 200 && r.text.includes("Claim this listing") && !r.text.includes("wa.me"));
+r = await anon("/nope"); ok("404 page", r.status === 404);
+r = await anon("/robots.txt"); ok("robots.txt", r.text.includes("Sitemap:"));
+r = await anon("/sitemap.xml"); ok("sitemap index", r.text.includes("/sitemap/b-1.xml"));
+r = await anon("/sitemap/b-1.xml"); ok("business sitemap", r.text.includes("/b/test-gold-jewellers"));
+r = await anon("/dashboard"); ok("dashboard needs login", r.status === 302 && r.loc.startsWith("/login"));
+
+// accounts
+r = await adminC("/signup", { method: "POST", form: { name: "Admin One", email: `admin-${uniq}@example.test`, phone: "9820000001", password: "test-pass-123" } });
+ok("first signup works", r.status === 303);
+r = await adminC("/admin"); const isFirstRun = r.status === 200; ok("first account is admin (fresh DB only)", isFirstRun, "re-run on a fresh local DB");
+r = await owner("/signup", { method: "POST", form: { name: "<script>alert(1)</script> Owner", email: `owner-${uniq}@example.test`, phone: "9820000002", password: "owner-pass-123" } });
+ok("second signup", r.status === 303);
+r = await owner("/admin"); ok("non-admin blocked from admin", r.status === 403);
+r = await anon("/login", { method: "POST", form: { email: `owner-${uniq}@example.test`, password: "wrong-password" } }); ok("wrong password rejected", r.loc.includes("err="));
+r = await anon("/signup", { method: "POST", form: { name: "X Y", email: "x@example.test", phone: "9820000009", password: "test-pass-123" }, origin: "https://evil.example" }); ok("cross-site POST blocked", r.status === 403);
+r = await anon("/signup", { method: "POST", form: { name: "X Y", email: "bad", phone: "9820000009", password: "short" } }); ok("signup validation", r.loc.includes("err="));
+
+// claim flow
+r = await owner("/dashboard/claim?q=Test+Gold"); ok("claim search finds business", r.text.includes("This is mine"));
+r = await owner("/dashboard/claim", { method: "POST", form: { b: "test-gold-jewellers", role: "Owner", phone: "9820000002", note: "hello" } }); ok("claim submitted", r.status === 303);
+r = await owner("/dashboard/products"); ok("no access before approval", r.text.includes("don't have a business listing") || r.text.includes("Set up your business"));
+if (isFirstRun) {
+  r = await adminC("/admin"); const m = /\/admin\/claims\/(\d+)\/approve/.exec(r.text); ok("admin sees claim, owner name escaped", !!m && !r.text.includes("<script>alert(1)"));
+  r = await adminC(`/admin/claims/${m[1]}/approve`, { method: "POST" }); ok("claim approved", r.loc.includes("ok="));
+
+  r = await owner("/dashboard"); ok("owner dashboard", r.status === 200 && r.text.includes("Profile views"));
+  r = await owner("/dashboard/profile", { method: "POST", multipart: { name: "Test Gold Jewellers", city: "Mumbai", about: "Since 1980 <b>bold</b>", phone: "9820000002", whatsapp: "9820000002", website: "javascript:alert(1)", instagram: "instagram.com/testgold", theme: "emerald", types: ["manufacturer", "retailer", "pizza"], logo: jpg() } });
+  ok("profile saved", r.loc.includes("ok="));
+  r = await owner("/dashboard/products", { method: "POST", multipart: { name: "22K Temple Necklace", category: "Necklaces", weight: "24.5 g", purity: "22K", image: jpg() } }); ok("product added", r.loc.includes("ok="));
+  r = await owner("/dashboard/products", { method: "POST", multipart: { name: "Bad file", image: new File(["<svg onload=alert(1)>"], "x.svg", { type: "image/svg+xml" }) } }); ok("non-image upload rejected", r.loc.includes("err="));
+  r = await owner("/dashboard/links", { method: "POST", form: { title: "New collection", url: "example.com/new" } }); ok("link added", r.loc.includes("ok="));
+  r = await owner("/dashboard/links", { method: "POST", form: { title: "Evil", url: "javascript:alert(1)" } }); ok("javascript: link rejected", r.loc.includes("err="));
+  r = await owner("/dashboard/extras", { method: "POST", multipart: { kind: "faq", title: "Do you make custom designs?", body: "Yes, in 2 weeks." } }); ok("FAQ added", r.loc.includes("ok="));
+  r = await owner("/dashboard/extras", { method: "POST", multipart: { kind: "offer", title: "Zero making" } }); ok("offer blocked on free plan", r.loc.includes("err="));
+  r = await owner("/dashboard/extras", { method: "POST", multipart: { kind: "gallery", title: "Showroom", image: jpg() } }); ok("gallery photo added", r.loc.includes("ok="));
+
+  r = await anon("/b/test-gold-jewellers");
+  ok("claimed listing shows contact, catalogue, FAQ, types", r.text.includes("wa.me/919820000002") && r.text.includes("22K Temple Necklace") && r.text.includes("custom designs") && r.text.includes("Manufacturers") && r.text.includes("Claimed by owner"));
+  ok("HTML in about is escaped; js: website dropped", r.text.includes("&lt;b&gt;bold") && !r.text.includes("javascript:alert"));
+  const img = /\/img\/(\d+)/.exec(r.text); r = await anon(img ? img[0] : "/img/0"); ok("image served", r.status === 200 && r.type === "image/jpeg");
+  r = await anon("/b/test-gold-jewellers/catalogue"); ok("catalogue page", r.text.includes("Order on WhatsApp"));
+  const pid = /\/go\/p\/(\d+)/.exec(r.text)[1];
+  r = await anon(`/go/p/${pid}`); ok("WhatsApp order redirect", r.status === 302 && r.loc.startsWith("https://wa.me/919820000002"));
+  r = await anon("/bio/test-gold-jewellers"); ok("bio page with theme, links, powered-by", r.text.includes("New collection") && r.text.includes("#06201a") && r.text.includes("Powered by"));
+  const lid = /\/go\/l\/(\d+)/.exec(r.text)[1];
+  r = await anon(`/go/l/${lid}`); ok("link redirect + tracking", r.status === 302 && r.loc === "https://example.com/new");
+  r = await anon("/b/test-gold-jewellers/qr.svg"); ok("QR code", r.type.includes("svg") && r.text.includes("<svg"));
+  r = await anon("/b/test-gold-jewellers/vcard.vcf"); ok("vCard", r.text.includes("BEGIN:VCARD") && r.text.includes("TEL"));
+
+  r = await anon("/b/test-gold-jewellers/enquiry", { method: "POST", form: { name: "Ravi", phone: "98200 12345", message: "Need bangles", product_id: pid } }); ok("enquiry sent", r.loc.includes("sent=1"));
+  r = await anon("/b/test-gold-jewellers/enquiry", { method: "POST", form: { name: "Ravi", phone: "12", message: "x" } }); ok("enquiry validation", r.loc.includes("err="));
+  r = await owner("/dashboard/enquiries"); ok("owner sees enquiry", r.text.includes("Ravi") && r.text.includes("Need bangles"));
+
+  // another user can't touch owner's data
+  await other("/signup", { method: "POST", form: { name: "Other User", email: `other-${uniq}@example.test`, phone: "9820000003", password: "other-pass-123" } });
+  await other(`/dashboard/products/${pid}/delete`, { method: "POST" });
+  r = await anon("/b/test-gold-jewellers/catalogue"); ok("other user cannot delete owner's product", r.text.includes("22K Temple Necklace"));
+  r = await other("/dashboard/claim?b=test-gold-jewellers"); ok("already-claimed listing can't be claimed", r.text.includes("already been claimed"));
+  r = await other("/dashboard/new", { method: "POST", form: { name: "Fresh Silver House", city: "Jaipur", gst: "" } }); ok("new listing created", r.loc.includes("ok="));
+  r = await anon("/directory?q=Fresh+Silver"); ok("new listing in directory", r.text.includes("Fresh Silver House"));
+
+  // membership
+  r = await owner("/dashboard/membership", { method: "POST", form: { plan: "premium_yearly" } }); ok("membership request (manual mode)", r.loc.includes("ok="));
+  r = await adminC("/admin"); const pm = /\/admin\/payments\/(\d+)\/activate/.exec(r.text); ok("admin sees membership request", !!pm);
+  r = await adminC(`/admin/payments/${pm[1]}/activate`, { method: "POST" }); ok("premium activated", r.loc.includes("ok="));
+  r = await owner("/dashboard/extras", { method: "POST", multipart: { kind: "offer", title: "Zero making charges" } }); ok("offer allowed on premium", r.loc.includes("ok="));
+  r = await anon("/"); ok("featured on homepage", r.text.includes("Premium members") && r.text.includes("Featured"));
+  r = await anon("/bio/test-gold-jewellers"); ok("premium bio has no powered-by", !r.text.includes("Powered by"));
+  r = await owner("/logout", { method: "POST" }); r = await owner("/dashboard"); ok("logout works", r.status === 302);
+}
+console.log(`\n${pass} passed, ${fail} failed`);
+process.exit(fail ? 1 : 0);
