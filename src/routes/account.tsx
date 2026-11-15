@@ -84,7 +84,7 @@ async function myBiz(c: C): Promise<Business | null> {
   return c.env.DB.prepare(`SELECT * FROM businesses WHERE owner_id = ? ORDER BY id LIMIT 1`).bind(c.get("user")!.id).first<Business>();
 }
 
-const NAV = [["/dashboard", "Overview"], ["/dashboard/profile", "Business profile"], ["/dashboard/products", "Catalogue"], ["/dashboard/links", "Bio link"], ["/dashboard/extras", "Photos, offers, FAQs"], ["/dashboard/enquiries", "Enquiries"], ["/dashboard/membership", "Membership"]] as const;
+const NAV = [["/dashboard", "Overview"], ["/dashboard/profile", "Business profile"], ["/dashboard/products", "Catalogue"], ["/dashboard/links", "Bio link"], ["/dashboard/extras", "Photos, offers, FAQs"], ["/dashboard/enquiries", "Enquiries"], ["/dashboard/membership", "Membership"], ["/saved", "Saved listings"]] as const;
 
 function shell(c: C, title: string, body: Child) {
   const path = new URL(c.req.url).pathname;

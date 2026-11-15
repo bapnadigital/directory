@@ -200,7 +200,7 @@ admin.post("/listings/:id/:action{hide-contact|release|delete}", async (c) => {
   const id = Number(c.req.param("id")), action = c.req.param("action"), db = c.env.DB;
   if (action === "hide-contact") { await db.batch([db.prepare(`DELETE FROM private_contacts WHERE business_id = ?`).bind(id), db.prepare(`DELETE FROM reveals WHERE business_id = ?`).bind(id)]); return back(c, "Members-only contact removed"); }
   if (action === "release") { await db.prepare(`UPDATE businesses SET owner_id = NULL WHERE id = ?`).bind(id).run(); return back(c, "Owner removed"); }
-  await db.batch(["products", "links", "extras", "images", "enquiries", "claims", "payments", "business_types", "private_contacts", "reveals", "reviews", "reports", "claim_codes"].map((t) => db.prepare(`DELETE FROM ${t} WHERE business_id = ?`).bind(id)).concat(db.prepare(`DELETE FROM businesses WHERE id = ?`).bind(id)));
+  await db.batch(["products", "links", "extras", "images", "enquiries", "claims", "payments", "business_types", "private_contacts", "reveals", "reviews", "reports", "claim_codes", "saved"].map((t) => db.prepare(`DELETE FROM ${t} WHERE business_id = ?`).bind(id)).concat(db.prepare(`DELETE FROM businesses WHERE id = ?`).bind(id)));
   return back(c, "Listing deleted");
 });
 admin.post("/banners", async (c) => {

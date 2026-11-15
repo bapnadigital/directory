@@ -78,3 +78,41 @@ reviews.post("/b/:slug/review/:id/reply", async (c) => {
   if (reply) await c.env.DB.prepare(`UPDATE reviews SET reply = ? WHERE id = ? AND business_id = ?`).bind(reply, Number(c.req.param("id")), b.id).run();
   return c.redirect(`/b/${slug}?rok=${encodeURIComponent("Reply posted")}#reviews`, 303);
 });
+
+// ---- Saved listings (a private shortlist for any signed-in user)
+import { BizCard, page, type Card } from "../ui";
+
+export async function isSaved(db: D1Database, userId: number, businessId: number) {
+  return !!(await db.prepare(`SELECT 1 AS x FROM saved WHERE user_id = ? AND business_id = ?`).bind(userId, businessId).first());
+}
+
+reviews.post("/b/:slug/save", async (c) => {
+  const slug = c.req.param("slug").toLowerCase();
+  const u = c.get("user");
+  if (!u) return c.redirect(`/login?next=${encodeURIComponent(`/b/${slug}`)}`, 303);
+  const b = await c.env.DB.prepare(`SELECT id FROM businesses WHERE slug = ?`).bind(slug).first<{ id: number }>();
+  if (!b) return c.notFound();
+  if (await isSaved(c.env.DB, u.id, b.id)) await c.env.DB.prepare(`DELETE FROM saved WHERE user_id = ? AND business_id = ?`).bind(u.id, b.id).run();
+  else {
+    const n = await c.env.DB.prepare(`SELECT count(*) AS n FROM saved WHERE user_id = ?`).bind(u.id).first<{ n: number }>();
+    if ((n?.n ?? 0) < 200) await c.env.DB.prepare(`INSERT OR IGNORE INTO saved (user_id, business_id, created_at) VALUES (?, ?, ?)`).bind(u.id, b.id, now()).run();
+  }
+  return c.redirect((await c.req.parseBody()).back === "saved" ? "/saved" : `/b/${slug}`, 303);
+});
+
+reviews.get("/saved", async (c) => {
+  const u = c.get("user");
+  if (!u) return c.redirect("/login?next=%2Fsaved", 302);
+  const rows = (await c.env.DB.prepare(`SELECT b.id, b.slug, b.name, b.city, b.owner_id, b.plan, b.plan_expires, b.logo_image, b.gst,
+      (SELECT group_concat(type) FROM business_types t WHERE t.business_id = b.id) AS types
+    FROM saved s JOIN businesses b ON b.id = s.business_id WHERE s.user_id = ? ORDER BY s.created_at DESC LIMIT 200`).bind(u.id).all<Card>()).results;
+  return page(c, { title: "Saved listings", noindex: true }, (
+    <main class="wrap" style="padding-top:24px">
+      <h1 style="font-size:24px">Saved listings</h1>
+      <p class="small muted">Your private shortlist. Only you can see it.</p>
+      {rows.length === 0
+        ? <div class="card small">Nothing saved yet. Open any business and tap <b>Save</b> to keep it here. <a class="gold" href="/directory">Browse the directory</a></div>
+        : <div class="grid g3" style="margin-top:12px">{rows.map((b) => <BizCard b={b} />)}</div>}
+    </main>
+  ));
+});

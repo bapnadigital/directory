@@ -100,3 +100,5 @@ section+section{padding-top:22px}.biz .top img{object-fit:contain}
 .sugg{position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:30;background:#fff;border:1px solid var(--border);border-radius:12px;box-shadow:0 14px 34px -14px rgba(11,31,68,.35);overflow:hidden;text-align:left}
 .sugg a{display:block;padding:9px 14px;font-size:13px;color:var(--text);border-top:1px solid var(--surface2)}.sugg a:first-child{border-top:0}.sugg a:hover{background:var(--surface2)}.sugg span{color:var(--muted)}
 .todo li{margin:6px 0}.todo .done{color:var(--muted);text-decoration:line-through}
+
+.only-wide{display:none}@media(min-width:760px){.only-wide{display:inline}}

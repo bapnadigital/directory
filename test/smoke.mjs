@@ -119,5 +119,8 @@ r = await anon("/b/test-gold-jewellers/review", { method: "POST", form: { rating
 r = await other("/b/sparkle-diam/review", { method: "POST", form: { rating: "5" } }); ok("unclaimed listing takes no reviews", r.loc.includes("rerr="));
 r = await adminC("/admin?lq=sparkle"); ok("admin listing search", r.text.includes("Sparkle Diam") && r.text.includes("Delete listing"));
 r = await other("/admin/listings/1/delete", { method: "POST" }); ok("non-admin cannot delete listing", r.status !== 303 || !r.loc.includes("ok="));
+r = await other("/b/sparkle-diam/save", { method: "POST" }); r = await other("/saved"); ok("save listing to shortlist", r.text.includes("Sparkle Diam"));
+r = await other("/b/sparkle-diam/save", { method: "POST" }); r = await other("/saved"); ok("unsave listing", !r.text.includes("Sparkle Diam"));
+r = await anon("/saved"); ok("saved needs sign-in", r.status === 302);
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

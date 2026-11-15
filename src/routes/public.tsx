@@ -6,7 +6,7 @@ import { type AppEnv, clientIp } from "../auth";
 import { type Business, allow, isPremium, now, PLANS, PLAN_LIMITS, cacheBust } from "../db";
 import { Ad, Showcase, Sponsors } from "./ads";
 import { RateStrip } from "./rates";
-import { ReviewsBlock, loadReviews } from "./reviews";
+import { ReviewsBlock, isSaved, loadReviews } from "./reviews";
 import { sendMail } from "../mail";
 import { LatestNews, LatestRequests } from "./market";
 import { TOOLS } from "./tools";
@@ -393,6 +393,8 @@ pub.get("/b/:slug", async (c) => {
   const usedToday = pc && paid && viewer ? await revealsToday(db, viewer.id) : 0;
   const cerr = c.req.query("cerr");
   const rev = b.owner_id ? await loadReviews(db, b.id) : null;
+  const me = c.get("user");
+  const saved = me ? await isSaved(db, me.id, b.id) : false;
   const verified = claimed ? !!(await db.prepare(`SELECT 1 FROM claims WHERE business_id = ? AND user_id = ? AND status = 'approved' LIMIT 1`).bind(b.id, b.owner_id).first()) : false;
   const similar = b.city_slug ? (await db.prepare(`SELECT ${CARD_COLS} FROM businesses b WHERE b.city_slug = ? AND b.id <> ? ${ORDER} LIMIT 6`).bind(b.city_slug, b.id).all<Card>()).results : [];
   const wa = claimed ? waNumber(b.whatsapp || b.phone) : null;
@@ -440,6 +442,7 @@ pub.get("/b/:slug", async (c) => {
           <a class="btn ghost sm" href={`/bio/${b.slug}`}>Bio link</a>
           <a class="btn ghost sm" href={`/b/${b.slug}/qr.svg`} target="_blank">QR code</a>
           <a class="btn ghost sm" href={`https://wa.me/?text=${encodeURIComponent(`${b.name}${b.city ? `, ${b.city}` : ""}\n${url}`)}`} target="_blank" rel="noopener">Share</a>
+          <form method="post" action={`/b/${b.slug}/save`} style="display:inline"><button class="btn ghost sm" type="submit">{saved ? "★ Saved" : "☆ Save"}</button></form>
           <button class="btn ghost sm" data-copy={url}>Copy link</button>
         </div>
       </div>

@@ -46,7 +46,7 @@ export function page(c: Context<AppEnv>, o: PageOpts, body: Child) {
         <link rel="manifest" href="/manifest.webmanifest" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@600;700;800&display=swap" />
-        <link rel="stylesheet" href="/style.css?v=6" />
+        <link rel="stylesheet" href="/style.css?v=7" />
         {o.jsonld != null && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(o.jsonld).replace(/</g, "\\u003c") }} />}
       </head>
       <body style={o.bodyStyle}>
@@ -62,6 +62,7 @@ export function page(c: Context<AppEnv>, o: PageOpts, body: Child) {
                 <a href="/requirements" class="hide-sm">Requirements</a>
                 <a href="/cities" class="hide-sm">Cities</a>
                 <a href="/pricing" class="hide-sm">Membership</a>
+                {user ? <a href="/saved" class="small only-wide" title="Saved listings">★ Saved</a> : null}
                 {user ? <a href="/dashboard" class="btn sm">Dashboard</a> : <a href="/login" class="btn sm">Sign in</a>}
               </nav>
             </div>
