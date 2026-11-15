@@ -41,7 +41,7 @@ export const TOOLS: Tool[] = [
     fields: [
       { id: "usd", label: "International gold price ($ per troy ounce)", live: "goldUsd", step: "0.01" },
       { id: "inr", label: "USD / INR", live: "usdInr", step: "0.01" },
-      { id: "duty", label: "Total import duty and cess (%)", value: "6", step: "0.01", hint: "Enter the rate in force today. Duty changes with the Budget and notifications; 6% is only a starting value." },
+      { id: "duty", label: "Total import duty and cess (%)", value: "15", step: "0.01", hint: "15% has applied to commercial imports since 13 May 2026. Duty changes by notification, so confirm the rate in force today." },
       { id: "premium", label: "Premium or discount ($ per ounce)", value: "0", step: "0.01" },
       { id: "purity", label: "Bar purity", type: "select", options: [["0.995", "995"], ["0.999", "999"]] },
     ],
