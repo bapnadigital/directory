@@ -53,7 +53,7 @@ function drawSvg(lines: string[], scale = 1): string {
       }
     }
   });
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w * scale}" height="${h * scale}"><path fill="#e9c46a" d="${d}"/></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w * scale}" height="${h * scale}"><path fill="#0b1f44" d="${d}"/></svg>`;
 }
 const wrap = (s: string, n = 30) => { const out: string[] = []; for (const part of s.split(/\s*[,/]\s*/).filter(Boolean)) for (let i = 0; i < part.length; i += n) out.push(part.slice(i, i + n)); return out.slice(0, 6); };
 

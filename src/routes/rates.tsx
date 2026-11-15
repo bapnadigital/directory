@@ -52,7 +52,7 @@ ratesApp.get("/rates", async (c) => {
   const dlabel = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-IN", { day: "numeric", month: "short", weekday: "short", timeZone: "UTC" });
   const chart = (title: string, pts: number[], unit: string) => pts.length >= 4 ? (
     <div class="card"><div class="row between"><b>{title}</b><span class="tiny muted">Low {inr(Math.min(...pts))} · High {inr(Math.max(...pts))} {unit}</span></div>
-      <svg viewBox="0 0 600 120" preserveAspectRatio="none" style="width:100%;height:120px;margin-top:8px"><path d={spark(pts)} fill="none" stroke="#e9c46a" stroke-width="2" vector-effect="non-scaling-stroke" /></svg>
+      <svg viewBox="0 0 600 120" preserveAspectRatio="none" style="width:100%;height:120px;margin-top:8px"><path d={spark(pts)} fill="none" stroke="#b8860b" stroke-width="2" vector-effect="non-scaling-stroke" /></svg>
       <div class="tiny muted">Last 7 days, a point every 15 minutes while the desk is live.</div></div>
   ) : null;
   return page(c, {
@@ -146,7 +146,7 @@ ratesApp.get("/rates", async (c) => {
 ratesApp.get("/widget/rates", async (c) => {
   const r = await getRates(c.env);
   const k = keyRates(r), g = perGram(k), base = siteUrl(c);
-  return page(c, { title: "Live gold and silver rates", noindex: true, bare: true, bodyStyle: "background:#141432;margin:0" }, (
+  return page(c, { title: "Live gold and silver rates", noindex: true, bare: true, bodyStyle: "background:#ffffff;margin:0" }, (
     <div style="padding:14px;font-size:14px">
       <div class="row between"><b><i class="dot" /> Live rates</b><span class="tiny muted" data-rate-at>{r ? when(r.at) : ""}</span></div>
       <div class="kv"><span>Gold 995 with GST / 10 g</span><b class="gold" data-rate="gold995gst">{inr(k.gold995gst)}</b></div>

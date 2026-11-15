@@ -36,7 +36,7 @@ export function page(c: Context<AppEnv>, o: PageOpts, body: Child) {
         <meta property="og:title" content={fullTitle} />
         {o.desc && <meta property="og:description" content={o.desc} />}
         {canonical && <meta property="og:url" content={canonical} />}
-        <meta name="theme-color" content="#0f1020" />
+        <meta name="theme-color" content="#0b1f44" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@600;700;800&display=swap" />
         <link rel="stylesheet" href="/style.css" />
@@ -47,6 +47,7 @@ export function page(c: Context<AppEnv>, o: PageOpts, body: Child) {
           <header class="site">
             <div class="wrap">
               <a href="/" class="logo"><i>◆</i> {brand}</a>
+              <form class="hsearch" action="/directory" method="get"><input name="q" placeholder="Search jewellers, bullion dealers, cities" aria-label="Search" /></form>
               <nav class="main">
                 <a href="/directory">Directory</a>
                 <a href="/rates">Rates</a>
