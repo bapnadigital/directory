@@ -90,7 +90,7 @@ function shell(c: C, title: string, body: Child) {
   const u = c.get("user")!;
   return page(c, { title, noindex: true }, (
     <main class="wrap" style="padding-top:24px">
-      <div class="layout" style="grid-template-columns:220px 1fr">
+      <div class="layout dash">
         <aside class="card side">
           {NAV.map(([href, label]) => <a href={href} class={path === href ? "on" : ""}>{label}</a>)}
           {u.is_admin ? <a href="/admin">Admin</a> : null}

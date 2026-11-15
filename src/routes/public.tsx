@@ -312,7 +312,7 @@ pub.get("/b/:slug", async (c) => {
         </div>
       </div>
 
-      <div class="layout" style="grid-template-columns:1fr 340px;margin-top:20px">
+      <div class="layout listing" style="margin-top:20px">
         <div class="stack">
           {b.about && <div class="card"><h2 style="font-size:18px">About</h2><p class="small" style="white-space:pre-line">{b.about}</p></div>}
 
