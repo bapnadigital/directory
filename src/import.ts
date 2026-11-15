@@ -28,14 +28,24 @@ export async function importBatch(env: Env, pages = 4): Promise<{ done: boolean;
     const rows = data.results ?? [];
     if (data.total != null) await setMeta(env, "import_total", String(data.total));
     const t = now();
-    const stmts = rows.filter((r) => r.gst && r.name).map((r) => {
+    const stmts = rows.filter((r) => r.gst && r.name).flatMap((r) => {
       const name = (r.display_name || r.name).trim().slice(0, 120);
-      const slug = (r.slug || `${slugify(name)}-${r.gst.slice(-4).toLowerCase()}`).toLowerCase();
+      const gst = r.gst.toUpperCase();
+      const slug = (r.slug || `${slugify(name)}-${gst.slice(-4).toLowerCase()}`).toLowerCase();
       const city = r.city ? titleCase(r.city.trim()).slice(0, 60) : null;
-      return env.DB.prepare(`INSERT OR IGNORE INTO businesses (slug, name, gst, city, city_slug, gst_status, gst_since, state, source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'import', ?)`)
-        .bind(slug, name, r.gst.toUpperCase(), city, citySlug(city), r.gst_registration_status ?? null, r.gst_registration_date ?? null, stateFromGst(r.gst), t - offset);
+      const cs = citySlug(city), st = r.gst_registration_status ?? null, since = r.gst_registration_date ?? null, state = stateFromGst(gst);
+      return [
+        env.DB.prepare(`INSERT OR IGNORE INTO businesses (slug, name, gst, city, city_slug, gst_status, gst_since, state, source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'import', ?)`)
+          .bind(slug, name, gst, city, cs, st, since, state, t - offset),
+        // Same address taken by a trade-directory listing of the same business in the same city: attach the GST details to it.
+        env.DB.prepare(`UPDATE businesses SET gst = ?1, gst_status = ?2, gst_since = ?3, state = coalesce(state, ?4) WHERE slug = ?5 AND gst IS NULL AND (city_slug IS NULL OR city_slug IS ?6) AND NOT EXISTS (SELECT 1 FROM businesses x WHERE x.gst = ?1)`)
+          .bind(gst, st, since, state, slug, cs),
+        // Same name, different business: give it its own address.
+        env.DB.prepare(`INSERT OR IGNORE INTO businesses (slug, name, gst, city, city_slug, gst_status, gst_since, state, source, created_at) SELECT ?, ?, ?, ?, ?, ?, ?, ?, 'import', ? WHERE NOT EXISTS (SELECT 1 FROM businesses x WHERE x.gst = ?)`)
+          .bind(`${slug}-${gst.slice(-4).toLowerCase()}`.slice(0, 140), name, gst, city, cs, st, since, state, t - offset, gst),
+      ];
     });
-    if (stmts.length) await env.DB.batch(stmts);
+    for (let k = 0; k < stmts.length; k += 90) await env.DB.batch(stmts.slice(k, k + 90));
     offset += rows.length;
     await setMeta(env, "import_offset", String(offset));
     if (rows.length < PAGE) { await setMeta(env, "import_done", "1"); await setMeta(env, "import_note", "finished"); return { done: true, offset }; }

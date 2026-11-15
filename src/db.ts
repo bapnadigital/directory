@@ -10,6 +10,8 @@ export type Env = {
   IMPORT_URL?: string;
   IMPORT_KEY?: string;
   EMAIL?: { send(m: { to: string; from: string; subject: string; text: string; html?: string }): Promise<unknown> };
+  TURNSTILE_SITE_KEY?: string;
+  TURNSTILE_SECRET?: string;
   CASHFREE_APP_ID?: string;
   CASHFREE_SECRET?: string;
   CASHFREE_ENV?: string;

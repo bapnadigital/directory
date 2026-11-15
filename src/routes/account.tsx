@@ -5,6 +5,7 @@ import { type AppEnv, clientIp, endSession, hashPassword, requireUser, startSess
 import { type Business, type PlanKey, PLANS, allow, isPremium, limits, now, slugify, cacheBust } from "../db";
 import { CITIES, THEMES, TRADE_TYPES, safeUrl, stateFromGst } from "../content";
 import { Field, Flash, page, siteUrl } from "../ui";
+import { BOT_MSG, Turnstile, humanOk } from "../turnstile";
 
 export const account = new Hono<AppEnv>();
 type C = Context<AppEnv>;
@@ -30,6 +31,7 @@ function authPage(c: C, mode: "login" | "signup") {
           <Field label="Email" name="email" type="email" required max={160} />
           {mode === "signup" && <Field label="Mobile number" name="phone" type="tel" required max={16} />}
           <Field label="Password" name="password" type="password" required max={128} hint={mode === "signup" ? "At least 8 characters" : undefined} />
+          {mode === "signup" && <Turnstile c={c} />}
           <button class="btn block" type="submit">{mode === "login" ? "Sign in" : "Create account"}</button>
         </form>
         <p class="small muted center" style="margin-bottom:0">
@@ -48,6 +50,7 @@ account.post("/signup", async (c) => {
   const next = safeNext(str(f.next, 200));
   const fail = (m: string) => go(c, `/signup?next=${encodeURIComponent(next)}`, m, true);
   if (name.length < 2) return fail("Please enter your name");
+  if (!(await humanOk(c, f))) return fail(BOT_MSG);
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return fail("Please enter a valid email");
   if (phone.replace(/\D/g, "").length < 10) return fail("Please enter a valid mobile number");
   if (password.length < 8 || password.length > 128) return fail("Password must be at least 8 characters");

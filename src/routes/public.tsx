@@ -1,5 +1,6 @@
 /** @jsxImportSource hono/jsx */
 import { Hono, type Context } from "hono";
+import { BOT_MSG, Turnstile, humanOk } from "../turnstile";
 import type { Child } from "hono/jsx";
 import QRCode from "qrcode-svg";
 import { type AppEnv, clientIp } from "../auth";
@@ -542,6 +543,7 @@ pub.get("/b/:slug", async (c) => {
                 <Field label="Mobile number" name="phone" type="tel" required max={16} />
                 <Field label="What are you looking for?" name="message" area max={1000} />
                 <input name="website" tabindex={-1} autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true" />
+                <Turnstile c={c} />
                 <button class="btn block" type="submit">Send enquiry</button>
                 <p class="tiny muted center">Your number is shared only with this business.</p>
               </form>
@@ -570,6 +572,7 @@ pub.post("/b/:slug/enquiry", async (c) => {
   const message = String(f.message ?? "").trim().slice(0, 1000);
   if (name.length < 2 || name.length > 80) return back(`err=${encodeURIComponent("Please enter your name")}`);
   if (phone.length < 10 || phone.length > 13) return back(`err=${encodeURIComponent("Please enter a valid mobile number")}`);
+  if (!(await humanOk(c, f))) return back(`err=${encodeURIComponent(BOT_MSG)}`);
   if (!(await allow(c.env, `enq:ip:${clientIp(c)}`, 5, 3600)) || !(await allow(c.env, `enq:b:${b.id}`, 30, 3600))) {
     return back(`err=${encodeURIComponent("Too many enquiries. Please try again later.")}`);
   }

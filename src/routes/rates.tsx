@@ -1,5 +1,6 @@
 /** @jsxImportSource hono/jsx */
 import { Hono } from "hono";
+import { BOT_MSG, Turnstile, humanOk } from "../turnstile";
 import type { Context } from "hono";
 import type { AppEnv } from "../auth";
 import { RATE_SOURCE, getRates, inr, keyRates, perGram } from "../rates";
@@ -125,6 +126,7 @@ ratesApp.get("/rates", async (c) => {
         <form method="post" action="/rates/subscribe" class="row">
           <input type="email" name="email" required maxlength={120} placeholder="you@example.com" style="flex:1;min-width:200px" />
           <input name="website" tabindex={-1} autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true" />
+          <Turnstile c={c} />
           <button class="btn" type="submit">Send me the rates</button>
         </form>
       </div>
@@ -183,6 +185,7 @@ ratesApp.post("/rates/subscribe", async (c) => {
   if (String(f.website ?? "")) return to("ok", done);
   const email = String(f.email ?? "").trim().toLowerCase().slice(0, 120);
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return to("err", "Please enter a valid email address");
+  if (!(await humanOk(c, f))) return to("err", BOT_MSG);
   if (!(await allow(c.env, `rs:${clientIp(c)}`, 5, 86400))) return to("err", "Too many sign-ups from here today. Please try again tomorrow.");
   await subscribe(c.env, c.req.url, email);
   return to("ok", done);

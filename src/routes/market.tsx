@@ -1,5 +1,6 @@
 /** @jsxImportSource hono/jsx */
 import { Hono } from "hono";
+import { BOT_MSG, Turnstile, humanOk } from "../turnstile";
 import type { Context } from "hono";
 import { type AppEnv, clientIp } from "../auth";
 import { TRADE_TYPES, findType, safeUrl } from "../content";
@@ -104,6 +105,7 @@ market.get("/requirements/new", (c) => page(c, { title: "Post on the jewellery t
         <Field label="Details" name="details" area max={1000} placeholder="Purity, design type, delivery date, experience or salary range, anything else that helps" />
         <div class="grid g2"><Field label="Your name" name="name" required max={80} /><Field label="Mobile number" name="phone" type="tel" required max={16} /></div>
         <input name="website" tabindex={-1} autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true" />
+        <Turnstile c={c} />
         <button class="btn" type="submit">Post now</button>
         <p class="tiny muted">Your number is never shown on the public page. Buy requirements and work-wanted posts are shown to signed-in businesses with a claimed listing; offers and job vacancies to any signed-in member.</p>
       </form>
@@ -118,6 +120,7 @@ market.post("/requirements/new", async (c) => {
   const title = s(f.title, 100), city = s(f.city, 60), name = s(f.name, 80), phone = s(f.phone, 16);
   if (title.length < 8 || !city || !name || phone.replace(/\D/g, "").length < 10) return fail("Please fill in a title (at least 8 characters), your city, name and a valid mobile number");
   if (/https?:\/\/|www\./i.test(title + s(f.details, 1000))) return fail("Please remove web links from the post");
+  if (!(await humanOk(c, f))) return fail(BOT_MSG);
   if (!(await allow(c.env, `rq:${clientIp(c)}`, 3, 86400))) return fail("You can post up to 3 times a day");
   const u = c.get("user");
   const r = await c.env.DB.prepare(`INSERT INTO requests (title, category, details, qty, city, name, phone, user_id, created_at, kind) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
