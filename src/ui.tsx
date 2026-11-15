@@ -46,7 +46,7 @@ export function page(c: Context<AppEnv>, o: PageOpts, body: Child) {
         <link rel="manifest" href="/manifest.webmanifest" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@600;700;800&display=swap" />
-        <link rel="stylesheet" href="/style.css?v=8" />
+        <link rel="stylesheet" href="/style.css?v=9" />
         {o.jsonld != null && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(o.jsonld).replace(/</g, "\\u003c") }} />}
       </head>
       <body style={o.bodyStyle}>
@@ -54,7 +54,7 @@ export function page(c: Context<AppEnv>, o: PageOpts, body: Child) {
           <header class="site">
             <div class="wrap">
               <a href="/" class="logo"><i>◆</i> {brand}</a>
-              <form class="hsearch" action="/directory" method="get"><input name="q" placeholder="Search jewellers, bullion dealers, cities" aria-label="Search" /></form>
+              <form class="hsearch" action="/directory" method="get"><input name="q" placeholder="Search jewellers, bullion dealers, cities" aria-label="Search the directory" /></form>
               <nav class="main">
                 <a href="/directory">Directory</a>
                 <a href="/rates">Rates</a>

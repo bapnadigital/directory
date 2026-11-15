@@ -50,7 +50,9 @@ admin.get("/", async (c) => {
         {([["Businesses", biz?.n], ["Claimed", claimed?.n], ["Members", users?.n], ["Premium", premium?.n], ["Enquiries", enq?.n]] as const).map(([l, n]) => <div class="card stat"><b>{(n ?? 0).toLocaleString("en-IN")}</b><span class="small muted">{l}</span></div>)}
       </div>
 
-      <section><h2 style="font-size:20px;margin-bottom:10px">Claims to review ({claims.results.length})</h2>
+      <nav class="row" style="gap:6px;margin:14px 0 0" aria-label="Admin sections">{[["claims", "Claims"], ["payments", "Membership"], ["reports", "Reports"], ["views", "Contact views"], ["board", "Trade board"], ["events", "Events"], ["adleads", "Ad enquiries"], ["listings", "Find a listing"], ["reviews", "Reviews"], ["banners", "Banners"]].map(([i, l]) => <a class="badge" href={`#${i}`}>{l}</a>)}</nav>
+
+      <section id="claims"><h2 style="font-size:20px;margin-bottom:10px">Claims to review ({claims.results.length})</h2>
         {claims.results.length === 0 ? <div class="card muted small">Nothing waiting.</div> : <div class="card"><table><tr><th>Business</th><th>Claimed by</th><th>Details</th><th></th></tr>
           {claims.results.map((r) => <tr>
             <td><a class="gold" href={`/b/${r.slug}`} target="_blank">{r.name}</a><div class="tiny muted">{r.city} · {r.gst}</div></td>
@@ -60,7 +62,7 @@ admin.get("/", async (c) => {
           </tr>)}</table></div>}
       </section>
 
-      <section><h2 style="font-size:20px;margin-bottom:10px">Membership requests ({pays.results.length})</h2>
+      <section id="payments"><h2 style="font-size:20px;margin-bottom:10px">Membership requests ({pays.results.length})</h2>
         {pays.results.length === 0 ? <div class="card muted small">Nothing waiting.</div> : <div class="card"><table><tr><th>Business</th><th>Member</th><th>Plan</th><th></th></tr>
           {pays.results.map((r) => <tr>
             <td><a class="gold" href={`/b/${r.slug}`} target="_blank">{r.name}</a></td>
@@ -85,25 +87,25 @@ admin.get("/", async (c) => {
             <form method="post" action="/admin/import/restart" data-confirm="Re-read all businesses from the old site? Existing listings are kept."><button class="btn ghost sm" type="submit">Re-run from start</button></form></div>
         </div>
       </section>
-      <section>
+      <section id="reports">
         <h2 style="font-size:20px;margin-bottom:10px">Reports ({reports.length})</h2>
         {reports.length === 0 ? <div class="card small muted">No open reports.</div> : <div class="card"><table><tr><th>Listing</th><th>From</th><th>Message</th><th></th></tr>
           {reports.map((r) => <tr><td><a class="gold" href={`/b/${r.slug}`} target="_blank">{r.bname}</a></td><td>{r.name}<div class="tiny muted">{r.phone} · {when(r.created_at)}</div></td><td class="small" style="white-space:normal">{r.message}</td>
             <td><div class="row"><form method="post" action={`/admin/reports/${r.id}/close`}><button class="btn ghost sm" type="submit">Close</button></form><form method="post" action={`/admin/reports/${r.id}/release`} data-confirm="Remove the current owner from this listing so it can be claimed again?"><button class="btn danger sm" type="submit">Remove owner</button></form></div></td></tr>)}</table></div>}
       </section>
-      <section>
+      <section id="views">
         <h2 style="font-size:20px;margin-bottom:10px">Contact views today</h2>
         {viewers.length === 0 ? <div class="card small muted">No member has opened a contact today. Each member can open up to {DAILY_REVEALS} a day; fast repeated opening pauses the account automatically.</div> : <div class="card"><table><tr><th>Member</th><th>Opened today</th><th>All time</th></tr>
           {viewers.map((v) => <tr><td>{v.name}<div class="tiny muted">{v.email}</div></td><td>{v.n} of {DAILY_REVEALS}</td><td>{v.total}</td></tr>)}</table></div>}
       </section>
-      <section>
+      <section id="board">
         <h2 style="font-size:20px;margin-bottom:10px">Trade board posts ({reqs.length} recent)</h2>
         <p class="small muted">Daily rate email: {mailStats?.subs ?? 0} confirmed subscribers · {mailStats?.alerts ?? 0} open rate alerts</p>
         {reqs.length === 0 ? <div class="card small muted">None posted yet.</div> : <div class="card"><table><tr><th>Post</th><th>Posted by</th><th>Views</th><th></th></tr>
           {reqs.map((r) => <tr><td style="white-space:normal"><a class="gold" href={`/requirements/${r.id}`} target="_blank">{r.title}</a><div class="tiny muted">{(r as { kind?: string }).kind ?? "buy"} · {r.city} · {when(r.created_at)} · {r.status}</div></td><td>{r.name}<div class="tiny muted">{r.phone}</div></td><td>{r.views}</td>
             <td><form method="post" action={`/admin/requests/${r.id}/${r.status === "hidden" ? "open" : "hidden"}`}><button class="btn ghost sm" type="submit">{r.status === "hidden" ? "Show" : "Hide"}</button></form></td></tr>)}</table></div>}
       </section>
-      <section>
+      <section id="events">
         <h2 style="font-size:20px;margin-bottom:10px">Events</h2>
         <div class="grid g2">
           <form class="card" method="post" action="/admin/events">
@@ -118,7 +120,7 @@ admin.get("/", async (c) => {
           <div class="card"><b>Listed events ({events.length})</b>{events.length === 0 ? <p class="small muted">None yet. They appear on the public Events page.</p> : events.map((e) => <div class="row between" style="border-top:1px solid var(--border);padding:8px 0"><span class="small">{e.title}<div class="tiny muted">{e.starts_on} · {e.city}</div></span><form method="post" action={`/admin/events/${e.id}/delete`} data-confirm="Delete this event?"><button class="btn danger sm" type="submit">Delete</button></form></div>)}</div>
         </div>
       </section>
-      <section>
+      <section id="adleads">
         <h2 style="font-size:20px;margin-bottom:10px">Advertising enquiries ({adLeads.length})</h2>
         {adLeads.length === 0 ? <div class="card small muted">None yet. They come from the public Advertise page.</div> : <div class="card"><table><tr><th>Business</th><th>Contact</th><th>Message</th></tr>
           {adLeads.map((a) => <tr><td>{a.business}<div class="tiny muted">{when(a.created_at)}</div></td><td>{a.name}<div class="tiny muted">{a.phone}{a.email ? ` · ${a.email}` : ""}</div></td><td class="small" style="white-space:normal">{a.message}</td></tr>)}</table></div>}
@@ -137,7 +139,7 @@ admin.get("/", async (c) => {
               </span></div></div>)}
         </div>
       </section>
-      <section>
+      <section id="reviews">
         <h2 style="font-size:20px;margin-bottom:10px">Recent reviews</h2>
         {revs.length === 0 ? <div class="card small muted">No reviews yet.</div> : <div class="card"><table><tr><th>Business</th><th>Review</th><th></th></tr>
           {revs.map((r) => <tr style={r.status === "live" ? undefined : "opacity:.55"}><td><a class="gold" href={`/b/${r.slug}#reviews`} target="_blank">{r.bname}</a><div class="tiny muted">{r.uname} · {when(r.created_at)}</div></td><td class="small" style="white-space:normal">{"★".repeat(r.rating)} {r.body}</td>
