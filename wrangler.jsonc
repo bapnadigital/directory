@@ -7,6 +7,7 @@
   "assets": { "directory": "./public", "binding": "ASSETS" },
   // No database_id on purpose: Cloudflare creates the database on first deploy.
   "d1_databases": [{ "binding": "DB", "database_name": "jsh-directory" }],
+  "send_email": [{ "name": "EMAIL" }],
   "triggers": { "crons": ["* * * * *"] },
   "observability": { "enabled": true },
   "vars": {

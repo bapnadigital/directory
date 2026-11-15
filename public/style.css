@@ -50,3 +50,8 @@ details summary{cursor:pointer;font-weight:600}.stat b{display:block;font:700 26
 @media(max-width:700px){table{display:block;overflow-x:auto;white-space:nowrap}}
 section+section{padding-top:8px}
 @media(max-width:900px){.side{display:flex;gap:4px;overflow-x:auto;white-space:nowrap;padding:8px}.side a,.side form,.side button{flex:none;width:auto;margin:0}}
+.ad{display:block;position:relative;border:1px solid var(--border);border-radius:16px;overflow:hidden;margin:0 0 16px;background:var(--surface);text-align:center}
+.ad img{display:block;width:100%;height:auto;max-height:260px;object-fit:cover}.ad-text{display:block;padding:26px 16px;font:700 20px Sora,sans-serif;color:var(--gold)}
+.ad-tag{position:absolute;top:8px;right:8px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;background:rgba(10,10,30,.75);color:var(--muted);padding:2px 8px;border-radius:999px}
+.sponsors{display:flex;flex-wrap:wrap;gap:14px;justify-content:center;margin-top:14px}.sponsors a{display:grid;place-items:center;width:150px;height:76px;padding:10px;border:1px solid var(--border);border-radius:14px;background:var(--surface)}
+.sponsors img{max-width:100%;max-height:100%;object-fit:contain}

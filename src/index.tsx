@@ -5,6 +5,7 @@ import { type AppEnv, sessionMiddleware } from "./auth";
 import { type Env, ensureSchema, now } from "./db";
 import { importBatch } from "./import";
 import { importJtBatch } from "./jt-import";
+import { ads } from "./routes/ads";
 import { contact } from "./routes/contact";
 import { account } from "./routes/account";
 import { admin } from "./routes/admin";
@@ -17,6 +18,7 @@ app.use("*", secureHeaders({ xFrameOptions: "DENY", referrerPolicy: "strict-orig
 app.use("*", async (c, next) => { await ensureSchema(c.env); await next(); });
 app.use("*", sessionMiddleware);
 
+app.route("/", ads);
 app.route("/", contact);
 app.route("/", pub);
 app.route("/", account);

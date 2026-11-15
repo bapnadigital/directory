@@ -4,6 +4,8 @@ import type { Context } from "hono";
 import type { AppEnv, User } from "../auth";
 import { allow, now } from "../db";
 import { GLYPHS, GLYPH_H, GLYPH_W } from "../glyphs";
+import { Field, Flash, page } from "../ui";
+import { clientIp } from "../auth";
 
 // Paid-member contact reveal. Numbers and emails are never written into a page:
 // a member reveals one listing at a time (daily cap, burst limit, every reveal
@@ -101,4 +103,39 @@ contact.get("/b/:slug/call", async (c) => {
   const first = ((row.mobile || row.tel || "").split(/[,/]/)[0] ?? "").replace(/[^\d+]/g, "");
   if (!first) return c.redirect(`/b/${slug}#contact`, 303);
   return c.redirect(`tel:${first.length === 10 ? `+91${first}` : first}`, 302);
+});
+
+// Wrong-owner / wrong-details reports, reviewed in the admin panel.
+contact.get("/b/:slug/report", async (c) => {
+  const b = await c.env.DB.prepare(`SELECT slug, name FROM businesses WHERE slug = ?`).bind(c.req.param("slug").toLowerCase()).first<{ slug: string; name: string }>();
+  if (!b) return c.notFound();
+  return page(c, { title: `Report ${b.name}`, noindex: true }, (
+    <main class="wrap narrow" style="padding-top:30px">
+      <div class="card">
+        <h1 style="font-size:22px">Report this listing</h1>
+        <p class="small muted">Use this if <b>{b.name}</b> has been claimed by someone who is not the owner, or the details are wrong. We review every report.</p>
+        <Flash ok={c.req.query("ok")} err={c.req.query("err")} />
+        <form method="post" action={`/b/${b.slug}/report`}>
+          <Field label="Your name" name="name" required max={80} />
+          <Field label="Your mobile number" name="phone" type="tel" required max={16} />
+          <Field label="What is wrong?" name="message" area required max={1000} />
+          <input name="website" tabindex={-1} autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true" />
+          <button class="btn" type="submit">Send report</button>
+        </form>
+      </div>
+    </main>
+  ));
+});
+contact.post("/b/:slug/report", async (c) => {
+  const slug = c.req.param("slug").toLowerCase();
+  const f = await c.req.parseBody();
+  const s = (v: unknown, n: number) => String(v ?? "").trim().slice(0, n);
+  const b = await c.env.DB.prepare(`SELECT id FROM businesses WHERE slug = ?`).bind(slug).first<{ id: number }>();
+  if (!b) return c.notFound();
+  const to = (q: string) => c.redirect(`/b/${slug}/report?${q}`, 303);
+  if (s(f.website, 10)) return to("ok=Thanks");
+  if (!s(f.name, 80) || s(f.phone, 16).replace(/\D/g, "").length < 10 || !s(f.message, 1000)) return to(`err=${encodeURIComponent("Please fill in your name, mobile number and what is wrong")}`);
+  if (!(await allow(c.env, `rep:${clientIp(c)}`, 5, 3600))) return to(`err=${encodeURIComponent("Too many reports. Please try later.")}`);
+  await c.env.DB.prepare(`INSERT INTO reports (business_id, name, phone, message, created_at) VALUES (?, ?, ?, ?, ?)`).bind(b.id, s(f.name, 80), s(f.phone, 16), s(f.message, 1000), now()).run();
+  return to(`ok=${encodeURIComponent("Thank you. Your report has been sent to our team.")}`);
 });

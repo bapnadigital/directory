@@ -3,6 +3,7 @@ import { Hono, type Context } from "hono";
 import QRCode from "qrcode-svg";
 import { type AppEnv, clientIp } from "../auth";
 import { type Business, allow, isPremium, now, PLANS, PLAN_LIMITS } from "../db";
+import { Ad, Sponsors } from "./ads";
 import { DAILY_REVEALS, hasReveal, isPaidMember, revealsToday } from "./contact";
 import { CITIES, THEMES, TRADE_TYPES, findCity, findType, initials, safeUrl, waNumber } from "../content";
 import { BizCard, type Card, Field, Flash, page, siteUrl } from "../ui";
@@ -74,6 +75,8 @@ pub.get("/", async (c) => {
         </form>
       </section>
 
+      <div class="wrap"><Ad c={c} place="home" /></div>
+
       <section class="wrap">
         <div class="center"><div class="eyebrow">Browse by category</div><h2 style="font-size:26px;margin:6px 0 18px">What are you looking for?</h2></div>
         <div class="grid g5">
@@ -118,6 +121,8 @@ pub.get("/", async (c) => {
         </div>
       </section>
 
+      <Sponsors c={c} />
+
       <section class="wrap">
         <div class="band">
           <div class="eyebrow">Free to start</div>
@@ -131,7 +136,7 @@ pub.get("/", async (c) => {
 });
 
 // ───────────────────────── Directory ─────────────────────────
-function listing(title: string, sub: string, basePath: string, f: Filters, pageNo: number, data: { rows: Card[]; total: number }, showFilters: boolean) {
+function listing(title: string, sub: string, basePath: string, f: Filters, pageNo: number, data: { rows: Card[]; total: number }, showFilters: boolean, c: Context<AppEnv>) {
   const qs = (p: number) => {
     const u = new URLSearchParams();
     if (f.q) u.set("q", f.q);
@@ -167,6 +172,7 @@ function listing(title: string, sub: string, basePath: string, f: Filters, pageN
           </form>
         </aside>
         <div>
+          <Ad c={c} place="directory" />
           {data.rows.length === 0
             ? <div class="card center muted">No businesses match. Try a different search.</div>
             : <div class="grid g3">{data.rows.map((b) => <BizCard b={b} />)}</div>}
@@ -191,7 +197,7 @@ pub.get("/directory", async (c) => {
   const data = await search(c.env.DB, f, p);
   const filtered = !!(f.q || f.city || f.type || f.claimed || p > 1);
   return page(c, { title: "Jewellery business directory", desc: "Search jewellery manufacturers, wholesalers, retailers and bullion dealers across India.", path: "/directory", noindex: filtered },
-    listing("Jewellery directory", "Free to search, no sign-in needed.", "/directory", f, p, data, true));
+    listing("Jewellery directory", "Free to search, no sign-in needed.", "/directory", f, p, data, true, c));
 });
 
 pub.get("/city/:slug", async (c) => {
@@ -206,7 +212,7 @@ pub.get("/city/:slug", async (c) => {
     path: `/city/${city.slug}`, noindex: p > 1 || !!f.q,
     jsonld: { "@context": "https://schema.org", "@type": "ItemList", name: `Jewellers in ${city.label}`, numberOfItems: data.total,
       itemListElement: data.rows.slice(0, 20).map((b, i) => ({ "@type": "ListItem", position: i + 1, name: b.name, url: `${siteUrl(c)}/b/${b.slug}` })) },
-  }, listing(`Jewellers in ${city.label}`, city.note, `/city/${city.slug}`, f, p, data, false));
+  }, listing(`Jewellers in ${city.label}`, city.note, `/city/${city.slug}`, f, p, data, false, c));
 });
 
 pub.get("/category/:slug", async (c) => {
@@ -216,7 +222,7 @@ pub.get("/category/:slug", async (c) => {
   const p = pageNum(c.req.query("page"));
   const data = await search(c.env.DB, f, p);
   return page(c, { title: `${t.label} — jewellery trade directory`, desc: `Find ${t.label.toLowerCase()} in the Indian jewellery trade. ${data.total.toLocaleString("en-IN")} businesses listed.`, path: `/category/${t.slug}`, noindex: p > 1 || !!f.q },
-    listing(t.label, "Businesses tagged by their owners appear first.", `/category/${t.slug}`, f, p, data, false));
+    listing(t.label, "Businesses tagged by their owners appear first.", `/category/${t.slug}`, f, p, data, false, c));
 });
 
 pub.get("/cities", (c) => page(c, { title: "Jewellery hubs of India", desc: "Browse jewellery businesses by city.", path: "/cities" }, (
@@ -358,6 +364,7 @@ pub.get("/b/:slug", async (c) => {
         </div>
 
         <aside class="stack">
+          <Ad c={c} place="listing" />
           {pc && (
             <div class="card" id="contact" style="border-color:rgba(233,196,106,.45)">
               <h2 style="font-size:18px;margin-bottom:8px">Contact details</h2>
@@ -385,6 +392,7 @@ pub.get("/b/:slug", async (c) => {
           {!claimed && b.source === "jt2023" && b.address && (
             <div class="card small"><b>Address</b><p class="muted" style="margin:2px 0;white-space:pre-line">{b.address}</p></div>
           )}
+          {claimed && <a class="tiny muted" href={`/b/${b.slug}/report`} rel="nofollow">Not the real owner? Report this listing</a>}
           {claimed && (b.address || b.hours) && (
             <div class="card small">
               {b.address && <><b>Address</b><p class="muted" style="margin:2px 0 10px;white-space:pre-line">{b.address}</p></>}

@@ -11,6 +11,7 @@ type C = Context<AppEnv>;
 
 const str = (v: unknown, max = 200) => String(v ?? "").trim().slice(0, max);
 const nul = (v: unknown, max = 200) => str(v, max) || null;
+const MAX_IMAGE = 600 * 1024;
 const go = (c: C, path: string, msg?: string, isErr = false) =>
   c.redirect(msg ? `${path}${path.includes("?") ? "&" : "?"}${isErr ? "err" : "ok"}=${encodeURIComponent(msg)}` : path, 303);
 const safeNext = (n?: string) => (n && /^\/[a-zA-Z0-9/_\-?=&%.]*$/.test(n) && !n.startsWith("//") ? n : "/dashboard");
@@ -164,18 +165,40 @@ account.get("/dashboard/claim", async (c) => {
   const results = !b && q.length >= 3
     ? (await db.prepare(`SELECT slug, name, city, gst FROM businesses WHERE owner_id IS NULL AND (name LIKE ? OR gst LIKE ?) ORDER BY name LIMIT 20`).bind(`%${q}%`, `%${q.toUpperCase()}%`).all<{ slug: string; name: string; city: string | null; gst: string | null }>()).results
     : [];
+  const rec = b && !b.owner_id ? await db.prepare(`SELECT email FROM private_contacts WHERE business_id = ?`).bind(b.id).first<{ email: string | null }>() : null;
+  const recEmail = firstEmail(rec?.email);
+  const codeSent = c.req.query("sent") === "1";
   return shell(c, "Claim your business", b ? (
-    b.owner_id ? <div class="card">This listing has already been claimed. If that's a mistake, contact us.</div> : (
-      <div class="card">
-        <p><b>{b.name}</b><br /><span class="small muted">{b.city} {b.gst ? `· GSTIN ${b.gst}` : ""}</span></p>
-        <form method="post" action="/dashboard/claim">
-          <input type="hidden" name="b" value={b.slug} />
-          <Field label="Your role in the business" name="role" placeholder="Owner / Partner / Director / Manager" required max={60} />
-          <Field label="Phone number registered with the business" name="phone" type="tel" required max={16} />
-          <Field label="Anything that helps us verify (optional)" name="note" area max={500} placeholder="e.g. name on the GST certificate" />
-          <button class="btn" type="submit">Submit claim</button>
-          <p class="tiny muted">We review every claim before giving access, to protect business owners.</p>
-        </form>
+    b.owner_id ? <div class="card">This listing has already been claimed. If that's a mistake, <a class="gold" href={`/b/${b.slug}/report`}>report it</a>.</div> : (
+      <div class="stack">
+        <div class="card"><b>{b.name}</b><br /><span class="small muted">{b.city} {b.gst ? `· GSTIN ${b.gst}` : ""}</span></div>
+        {recEmail && c.env.EMAIL && (
+          <div class="card">
+            <h2 style="font-size:18px">Option 1: verify by email (instant)</h2>
+            <p class="small muted">We send a 6-digit code to the email address on record for this business: <b>{maskEmail(recEmail)}</b></p>
+            {codeSent ? (
+              <form method="post" action="/dashboard/claim/verify">
+                <input type="hidden" name="b" value={b.slug} />
+                <label>6-digit code<input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength={6} required autocomplete="one-time-code" /></label>
+                <button class="btn" type="submit">Verify and claim</button>
+                <p class="tiny muted">The code is valid for 15 minutes.</p>
+              </form>
+            ) : null}
+            <form method="post" action="/dashboard/claim/send"><input type="hidden" name="b" value={b.slug} /><button class={codeSent ? "btn ghost sm" : "btn"} type="submit">{codeSent ? "Send a new code" : "Send code"}</button></form>
+          </div>
+        )}
+        <div class="card">
+          <h2 style="font-size:18px">{recEmail && c.env.EMAIL ? "Option 2: upload your GST certificate" : "Verify with your GST certificate"}</h2>
+          <form method="post" action="/dashboard/claim" enctype="multipart/form-data">
+            <input type="hidden" name="b" value={b.slug} />
+            <Field label="Your role in the business" name="role" placeholder="Owner / Partner / Director / Manager" required max={60} />
+            <Field label="Phone number registered with the business" name="phone" type="tel" required max={16} />
+            <label>GST registration certificate (photo or PDF, under 600 KB)<input type="file" name="doc" accept="image/jpeg,image/png,image/webp,application/pdf" data-resize="1600" required /></label>
+            <Field label="Anything else that helps us verify (optional)" name="note" area max={500} />
+            <button class="btn" type="submit">Submit claim</button>
+            <p class="tiny muted">The certificate is seen only by our verification team and is never shown publicly. We check that the GSTIN and trade name match this listing.</p>
+          </form>
+        </div>
       </div>
     )
   ) : (
@@ -188,17 +211,90 @@ account.get("/dashboard/claim", async (c) => {
   ));
 });
 
+const firstEmail = (raw?: string | null) => { const m = (raw ?? "").match(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/); return m ? m[0].toLowerCase() : null; };
+const maskEmail = (e: string) => { const [u, d] = e.split("@"); const parts = d.split("."); return `${u[0]}•••@${parts[0][0]}•••.${parts.slice(1).join(".")}`; };
+const codeHash = async (code: string, businessId: number, userId: number) => {
+  const h = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${code}:${businessId}:${userId}`));
+  return [...new Uint8Array(h)].map((x) => x.toString(16).padStart(2, "0")).join("");
+};
+const claimTarget = (c: C, slug: string) =>
+  c.env.DB.prepare(`SELECT b.id, b.slug, b.name, b.owner_id, p.email FROM businesses b LEFT JOIN private_contacts p ON p.business_id = b.id WHERE b.slug = ?`)
+    .bind(slug).first<{ id: number; slug: string; name: string; owner_id: number | null; email: string | null }>();
+
+account.post("/dashboard/claim/send", async (c) => {
+  const u = c.get("user")!;
+  if (await myBiz(c)) return c.redirect("/dashboard", 303);
+  const f = await c.req.parseBody();
+  const b = await claimTarget(c, str(f.b, 80));
+  if (!b || b.owner_id) return go(c, "/dashboard/claim", "That listing can't be claimed", true);
+  const to = firstEmail(b.email);
+  const path = `/dashboard/claim?b=${b.slug}`;
+  if (!to || !c.env.EMAIL) return go(c, path, "Email verification isn't available for this listing. Please upload the GST certificate.", true);
+  if (!(await allow(c.env, `cc:${u.id}`, 3, 86400)) || !(await allow(c.env, `ccb:${b.id}`, 5, 86400))) return go(c, path, "Too many codes requested today. Please upload the GST certificate instead.", true);
+  const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, "0");
+  await c.env.DB.batch([
+    c.env.DB.prepare(`DELETE FROM claim_codes WHERE business_id = ? AND user_id = ?`).bind(b.id, u.id),
+    c.env.DB.prepare(`INSERT INTO claim_codes (business_id, user_id, code_hash, expires_at, created_at) VALUES (?, ?, ?, ?, ?)`).bind(b.id, u.id, await codeHash(code, b.id, u.id), now() + 900, now()),
+  ]);
+  const host = new URL(c.env.SITE_URL || c.req.url).hostname.replace(/^www\./, "");
+  try {
+    await c.env.EMAIL.send({
+      to, from: `verify@${host}`, subject: `${code} is your ${c.env.BRAND_NAME} verification code`,
+      text: `Someone is claiming the listing "${b.name}" on ${c.env.BRAND_NAME}.\n\nVerification code: ${code}\n\nIt is valid for 15 minutes. If this was not you, ignore this email and do not share the code with anyone.`,
+    });
+  } catch (e) {
+    console.error("claim email", e);
+    return go(c, path, "We couldn't send the code right now. Please upload the GST certificate instead.", true);
+  }
+  return go(c, `${path}&sent=1`, "Code sent. Check the inbox of the email on record.");
+});
+
+account.post("/dashboard/claim/verify", async (c) => {
+  const u = c.get("user")!;
+  if (await myBiz(c)) return c.redirect("/dashboard", 303);
+  const f = await c.req.parseBody();
+  const b = await claimTarget(c, str(f.b, 80));
+  if (!b || b.owner_id) return go(c, "/dashboard/claim", "That listing can't be claimed", true);
+  const path = `/dashboard/claim?b=${b.slug}&sent=1`;
+  const row = await c.env.DB.prepare(`SELECT id, code_hash, expires_at, attempts FROM claim_codes WHERE business_id = ? AND user_id = ?`).bind(b.id, u.id).first<{ id: number; code_hash: string; expires_at: number; attempts: number }>();
+  if (!row || row.expires_at < now() || row.attempts >= 5) return go(c, path, "That code has expired. Send a new one.", true);
+  const code = str(f.code, 6).replace(/\D/g, "");
+  if ((await codeHash(code, b.id, u.id)) !== row.code_hash) {
+    await c.env.DB.prepare(`UPDATE claim_codes SET attempts = attempts + 1 WHERE id = ?`).bind(row.id).run();
+    return go(c, path, "That code is not correct.", true);
+  }
+  const upd = await c.env.DB.prepare(`UPDATE businesses SET owner_id = ? WHERE id = ? AND owner_id IS NULL`).bind(u.id, b.id).run();
+  if (!upd.meta.changes) return go(c, "/dashboard/claim", "That listing has just been claimed by someone else", true);
+  await c.env.DB.batch([
+    c.env.DB.prepare(`DELETE FROM claim_codes WHERE business_id = ?`).bind(b.id),
+    c.env.DB.prepare(`UPDATE claims SET status = 'rejected' WHERE business_id = ? AND status = 'pending'`).bind(b.id),
+    c.env.DB.prepare(`INSERT INTO claims (business_id, user_id, role, note, status, created_at) VALUES (?, ?, 'Verified by email code', 'Code sent to the email on record', 'approved', ?)`).bind(b.id, u.id, now()),
+  ]);
+  return go(c, "/dashboard", "Verified. This listing is now yours.");
+});
+
 account.post("/dashboard/claim", async (c) => {
   const u = c.get("user")!;
   if (await myBiz(c)) return c.redirect("/dashboard", 303);
   const f = await c.req.parseBody();
-  const b = await c.env.DB.prepare(`SELECT id, owner_id FROM businesses WHERE slug = ?`).bind(str(f.b, 80)).first<{ id: number; owner_id: number | null }>();
+  const slug = str(f.b, 80);
+  const b = await c.env.DB.prepare(`SELECT id, owner_id FROM businesses WHERE slug = ?`).bind(slug).first<{ id: number; owner_id: number | null }>();
   if (!b || b.owner_id) return go(c, "/dashboard/claim", "That listing can't be claimed", true);
+  const path = `/dashboard/claim?b=${slug}`;
   if (await c.env.DB.prepare(`SELECT 1 FROM claims WHERE user_id = ? AND status = 'pending'`).bind(u.id).first()) return go(c, "/dashboard", "You already have a claim under review");
-  if (!(await allow(c.env, `claim:${u.id}`, 3, 86400))) return go(c, "/dashboard/claim", "Too many claims today", true);
-  await c.env.DB.prepare(`INSERT INTO claims (business_id, user_id, role, phone, note, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
+  const doc = f.doc;
+  if (!(doc instanceof File) || doc.size === 0) return go(c, path, "Please attach the GST registration certificate", true);
+  if (doc.size > MAX_IMAGE) return go(c, path, "The certificate must be under 600 KB", true);
+  const buf = new Uint8Array(await doc.arrayBuffer());
+  const mime = buf[0] === 0xff && buf[1] === 0xd8 ? "image/jpeg" : buf[0] === 0x89 && buf[1] === 0x50 ? "image/png"
+    : buf[0] === 0x25 && buf[1] === 0x50 && buf[2] === 0x44 && buf[3] === 0x46 ? "application/pdf"
+    : buf[0] === 0x52 && buf[1] === 0x49 && buf[8] === 0x57 && buf[9] === 0x45 ? "image/webp" : null;
+  if (!mime) return go(c, path, "The certificate must be a JPG, PNG, WebP or PDF file", true);
+  if (!(await allow(c.env, `claim:${u.id}`, 3, 86400))) return go(c, path, "Too many claims today", true);
+  const r = await c.env.DB.prepare(`INSERT INTO claims (business_id, user_id, role, phone, note, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
     .bind(b.id, u.id, nul(f.role, 60), nul(f.phone, 16), nul(f.note, 500), now()).run();
-  return go(c, "/dashboard", "Claim submitted. We'll review it shortly.");
+  await c.env.DB.prepare(`INSERT OR REPLACE INTO claim_docs (claim_id, mime, data, size, created_at) VALUES (?, ?, ?, ?, ?)`).bind(Number(r.meta.last_row_id), mime, buf, buf.length, now()).run();
+  return go(c, "/dashboard", "Claim submitted with your certificate. We'll review it shortly.");
 });
 
 account.get("/dashboard/new", async (c) => {
@@ -230,7 +326,6 @@ account.post("/dashboard/new", async (c) => {
 });
 
 // ───────────────────────── Images ─────────────────────────
-const MAX_IMAGE = 600 * 1024;
 async function saveImage(c: C, b: Business, file: unknown): Promise<number | null | "bad"> {
   if (!(file instanceof File) || file.size === 0) return null;
   if (file.size > MAX_IMAGE) return "bad";

@@ -8,12 +8,13 @@ export type Env = {
   SITE_URL: string;
   IMPORT_URL?: string;
   IMPORT_KEY?: string;
+  EMAIL?: { send(m: { to: string; from: string; subject: string; text: string; html?: string }): Promise<unknown> };
   CASHFREE_APP_ID?: string;
   CASHFREE_SECRET?: string;
   CASHFREE_ENV?: string;
 };
 
-const SCHEMA_VERSION = "2";
+const SCHEMA_VERSION = "3";
 
 const SCHEMA: string[] = [
   `CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
@@ -76,6 +77,21 @@ const SCHEMA: string[] = [
      id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, business_id INTEGER NOT NULL,
      day TEXT NOT NULL, created_at INTEGER NOT NULL, UNIQUE (user_id, business_id, day))`,
   `CREATE INDEX IF NOT EXISTS reveals_user_day_idx ON reveals (user_id, day)`,
+  // Ownership checks: emailed codes, private proof documents, wrong-owner reports.
+  `CREATE TABLE IF NOT EXISTS claim_codes (
+     id INTEGER PRIMARY KEY AUTOINCREMENT, business_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
+     code_hash TEXT NOT NULL, expires_at INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS claim_codes_idx ON claim_codes (business_id, user_id)`,
+  `CREATE TABLE IF NOT EXISTS claim_docs (claim_id INTEGER PRIMARY KEY, mime TEXT NOT NULL, data BLOB NOT NULL, size INTEGER NOT NULL, created_at INTEGER NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS reports (
+     id INTEGER PRIMARY KEY AUTOINCREMENT, business_id INTEGER NOT NULL, name TEXT NOT NULL, phone TEXT NOT NULL,
+     message TEXT, status TEXT NOT NULL DEFAULT 'new', created_at INTEGER NOT NULL)`,
+  // Banner ads and sponsor logos.
+  `CREATE TABLE IF NOT EXISTS banners (
+     id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, url TEXT NOT NULL, image_id INTEGER, placement TEXT NOT NULL,
+     position INTEGER NOT NULL DEFAULT 0, active INTEGER NOT NULL DEFAULT 1, starts_at INTEGER, ends_at INTEGER,
+     views INTEGER NOT NULL DEFAULT 0, clicks INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS banners_place_idx ON banners (placement, active)`,
 ];
 
 let ready: Promise<void> | null = null;
