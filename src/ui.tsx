@@ -51,6 +51,7 @@ export function page(c: Context<AppEnv>, o: PageOpts, body: Child) {
                 <a href="/directory">Directory</a>
                 <a href="/rates">Rates</a>
                 <a href="/tools" class="hide-sm">Tools</a>
+                <a href="/requirements" class="hide-sm">Requirements</a>
                 <a href="/cities" class="hide-sm">Cities</a>
                 <a href="/pricing" class="hide-sm">Membership</a>
                 {user ? <a href="/dashboard" class="btn sm">Dashboard</a> : <a href="/login" class="btn sm">Sign in</a>}
@@ -64,7 +65,7 @@ export function page(c: Context<AppEnv>, o: PageOpts, body: Child) {
             <div class="wrap">
               <span>© {new Date().getFullYear()} {brand}</span>
               <span class="row">
-                <a href="/directory">Directory</a><a href="/rates">Gold rates</a><a href="/tools">Tools</a><a href="/cities">Cities</a><a href="/pricing">Membership</a>
+                <a href="/directory">Directory</a><a href="/rates">Gold rates</a><a href="/tools">Tools</a><a href="/requirements">Buy requirements</a><a href="/news">News</a><a href="/states">States</a><a href="/cities">Cities</a><a href="/pricing">Membership</a>
                 <a href="/signup">List your business</a><a href="/terms">Terms</a><a href="/privacy">Privacy</a>
               </span>
             </div>

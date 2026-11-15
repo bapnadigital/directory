@@ -5,6 +5,7 @@ import { type AppEnv, clientIp } from "../auth";
 import { type Business, allow, isPremium, now, PLANS, PLAN_LIMITS } from "../db";
 import { Ad, Sponsors } from "./ads";
 import { RateStrip } from "./rates";
+import { LatestNews, LatestRequests } from "./market";
 import { TOOLS } from "./tools";
 import { DAILY_REVEALS, hasReveal, isPaidMember, revealsToday } from "./contact";
 import { CITIES, STATES, THEMES, TRADE_TYPES, findCity, findState, findType, initials, safeUrl, waNumber } from "../content";
@@ -115,6 +116,8 @@ pub.get("/", async (c) => {
         </div>
       </section>
 
+      <LatestRequests c={c} />
+
       <section class="wrap">
         <div class="head"><div><div class="eyebrow">Free tools</div><h2>Calculators with live rates</h2></div><a class="gold small" href="/tools">All tools →</a></div>
         <div class="grid g4">{TOOLS.slice(0, 4).map((t) => <a class="card" href={`/tools/${t.slug}`}><b>{t.icon} {t.name}</b><p class="small muted" style="margin-bottom:0">{t.short}</p></a>)}</div>
@@ -128,6 +131,8 @@ pub.get("/", async (c) => {
           <div class="card"><h3>🔗 Bio link + QR</h3><p class="small muted">One link for Instagram and WhatsApp with all your links, a QR code and save-contact card.</p></div>
         </div>
       </section>
+
+      <LatestNews c={c} />
 
       <Sponsors c={c} />
 
@@ -655,7 +660,7 @@ pub.get("/sitemap/:file", async (c) => {
   const file = c.req.param("file");
   const base = siteUrl(c);
   const xml = (urls: string[]) => c.body(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map((u) => `<url><loc>${base}${u}</loc></url>`).join("\n")}\n</urlset>`, 200, { "content-type": "application/xml", "cache-control": "public, max-age=3600" });
-  if (file === "pages.xml") return xml(["/", "/directory", "/cities", "/pricing", "/rates", "/tools", "/states", "/categories", ...TOOLS.map((t) => `/tools/${t.slug}`), ...STATES.slice(0, 22).map((x) => `/state/${x.slug}`), ...CITIES.map((x) => `/city/${x.slug}`), ...TRADE_TYPES.map((t) => `/category/${t.slug}`)]);
+  if (file === "pages.xml") return xml(["/", "/directory", "/cities", "/pricing", "/rates", "/tools", "/states", "/categories", "/requirements", "/news", ...TOOLS.map((t) => `/tools/${t.slug}`), ...STATES.slice(0, 22).map((x) => `/state/${x.slug}`), ...CITIES.map((x) => `/city/${x.slug}`), ...TRADE_TYPES.map((t) => `/category/${t.slug}`)]);
   const m = /^b-(\d{1,3})\.xml$/.exec(file);
   if (!m) return c.notFound();
   const i = parseInt(m[1]!, 10);

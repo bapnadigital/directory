@@ -8,6 +8,8 @@ import { importJtBatch } from "./jt-import";
 import { snapshotRates } from "./rates";
 import { ratesApp } from "./routes/rates";
 import { toolsApp } from "./routes/tools";
+import { refreshNews } from "./news";
+import { market } from "./routes/market";
 import { ads } from "./routes/ads";
 import { contact } from "./routes/contact";
 import { account } from "./routes/account";
@@ -23,6 +25,7 @@ app.use("*", sessionMiddleware);
 
 app.route("/", ratesApp);
 app.route("/", toolsApp);
+app.route("/", market);
 app.route("/", ads);
 app.route("/", contact);
 app.route("/", pub);
@@ -38,6 +41,7 @@ export default {
     ctx.waitUntil((async () => {
       await ensureSchema(env);
       try { await importBatch(env, 8); } catch (e) { console.error("import", e); }
+      try { await refreshNews(env); } catch (e) { console.error("news", e); }
       try { await snapshotRates(env); } catch (e) { console.error("rates", e); }
       try { await importJtBatch(env, 4); } catch (e) { console.error("jt import", e); }
       await env.DB.prepare(`DELETE FROM sessions WHERE expires_at < ?`).bind(now()).run();

@@ -31,6 +31,7 @@ admin.get("/", async (c) => {
   const jtChunks = JT_CHUNKS.length;
   const docs = new Set((await db.prepare(`SELECT claim_id FROM claim_docs`).all<{ claim_id: number }>()).results.map((r) => r.claim_id));
   const reports = (await db.prepare(`SELECT r.id, r.name, r.phone, r.message, r.created_at, b.name AS bname, b.slug FROM reports r JOIN businesses b ON b.id = r.business_id WHERE r.status = 'new' ORDER BY r.created_at DESC LIMIT 50`).all<{ id: number; name: string; phone: string; message: string | null; created_at: number; bname: string; slug: string }>()).results;
+  const reqs = (await db.prepare(`SELECT id, title, city, name, phone, status, views, created_at FROM requests ORDER BY created_at DESC LIMIT 30`).all<{ id: number; title: string; city: string | null; name: string; phone: string; status: string; views: number; created_at: number }>()).results;
   const banners = (await db.prepare(`SELECT id, title, url, image_id, placement, active, ends_at, views, clicks FROM banners ORDER BY placement, position, id DESC LIMIT 100`).all<{ id: number; title: string; url: string; image_id: number | null; placement: string; active: number; ends_at: number | null; views: number; clicks: number }>()).results;
   return page(c, { title: "Admin", noindex: true }, (
     <main class="wrap" style="padding-top:24px">
@@ -81,6 +82,12 @@ admin.get("/", async (c) => {
           {reports.map((r) => <tr><td><a class="gold" href={`/b/${r.slug}`} target="_blank">{r.bname}</a></td><td>{r.name}<div class="tiny muted">{r.phone} · {when(r.created_at)}</div></td><td class="small" style="white-space:normal">{r.message}</td>
             <td><div class="row"><form method="post" action={`/admin/reports/${r.id}/close`}><button class="btn ghost sm" type="submit">Close</button></form><form method="post" action={`/admin/reports/${r.id}/release`} data-confirm="Remove the current owner from this listing so it can be claimed again?"><button class="btn danger sm" type="submit">Remove owner</button></form></div></td></tr>)}</table></div>}
       </section>
+      <section>
+        <h2 style="font-size:20px;margin-bottom:10px">Buy requirements ({reqs.length} recent)</h2>
+        {reqs.length === 0 ? <div class="card small muted">None posted yet.</div> : <div class="card"><table><tr><th>Requirement</th><th>Buyer</th><th>Views</th><th></th></tr>
+          {reqs.map((r) => <tr><td style="white-space:normal"><a class="gold" href={`/requirements/${r.id}`} target="_blank">{r.title}</a><div class="tiny muted">{r.city} · {when(r.created_at)} · {r.status}</div></td><td>{r.name}<div class="tiny muted">{r.phone}</div></td><td>{r.views}</td>
+            <td><form method="post" action={`/admin/requests/${r.id}/${r.status === "hidden" ? "open" : "hidden"}`}><button class="btn ghost sm" type="submit">{r.status === "hidden" ? "Show" : "Hide"}</button></form></td></tr>)}</table></div>}
+      </section>
       <section id="banners">
         <h2 style="font-size:20px;margin-bottom:10px">Banner ads and sponsors</h2>
         <div class="grid g2">
@@ -118,6 +125,10 @@ admin.post("/reports/:id/:action{close|release}", async (c) => {
   if (c.req.param("action") === "release") await c.env.DB.prepare(`UPDATE businesses SET owner_id = NULL WHERE id = ?`).bind(r.business_id).run();
   await c.env.DB.prepare(`UPDATE reports SET status = 'closed' WHERE id = ?`).bind(id).run();
   return back(c, c.req.param("action") === "release" ? "Owner removed. The listing can be claimed again." : "Report closed");
+});
+admin.post("/requests/:id/:action{open|hidden}", async (c) => {
+  await c.env.DB.prepare(`UPDATE requests SET status = ? WHERE id = ?`).bind(c.req.param("action"), Number(c.req.param("id"))).run();
+  return back(c, "Requirement updated");
 });
 admin.post("/banners", async (c) => {
   const f = await c.req.parseBody();
