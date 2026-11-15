@@ -35,6 +35,9 @@ admin.get("/", async (c) => {
   const events = (await db.prepare(`SELECT id, title, city, starts_on FROM events ORDER BY starts_on DESC LIMIT 60`).all<{ id: number; title: string; city: string | null; starts_on: string }>()).results;
   const viewers = (await db.prepare(`SELECT u.name, u.email, count(*) AS n, (SELECT count(*) FROM reveals r2 WHERE r2.user_id = u.id) AS total FROM reveals r JOIN users u ON u.id = r.user_id WHERE r.day = ? GROUP BY u.id ORDER BY n DESC LIMIT 10`).bind(today()).all<{ name: string; email: string; n: number; total: number }>()).results;
   const adLeads = (await db.prepare(`SELECT name, business, phone, email, message, created_at FROM ad_leads ORDER BY created_at DESC LIMIT 20`).all<{ name: string; business: string; phone: string; email: string | null; message: string | null; created_at: number }>()).results;
+  const lq = String(c.req.query("lq") ?? "").trim().slice(0, 80);
+  const found = lq.length >= 3 ? (await db.prepare(`SELECT b.id, b.slug, b.name, b.city, b.source, b.plan, u.email AS owner, EXISTS (SELECT 1 FROM private_contacts p WHERE p.business_id = b.id) AS has_contact FROM businesses b LEFT JOIN users u ON u.id = b.owner_id WHERE b.name LIKE ?1 OR b.gst = ?2 OR b.slug = ?3 ORDER BY (b.owner_id IS NOT NULL) DESC, b.name LIMIT 15`).bind(`%${lq}%`, lq.toUpperCase(), lq.toLowerCase().replace(/^.*\/b\//, "")).all<{ id: number; slug: string; name: string; city: string | null; source: string; plan: string; owner: string | null; has_contact: number }>()).results : [];
+  const revs = (await db.prepare(`SELECT r.id, r.rating, r.body, r.status, r.created_at, b.name AS bname, b.slug, u.name AS uname FROM reviews r JOIN businesses b ON b.id = r.business_id JOIN users u ON u.id = r.user_id ORDER BY r.created_at DESC LIMIT 20`).all<{ id: number; rating: number; body: string | null; status: string; created_at: number; bname: string; slug: string; uname: string }>()).results;
   const reqs = (await db.prepare(`SELECT id, title, city, name, phone, status, views, created_at FROM requests ORDER BY created_at DESC LIMIT 30`).all<{ id: number; title: string; city: string | null; name: string; phone: string; status: string; views: number; created_at: number }>()).results;
   const banners = (await db.prepare(`SELECT id, title, url, image_id, placement, active, ends_at, views, clicks FROM banners ORDER BY placement, position, id DESC LIMIT 100`).all<{ id: number; title: string; url: string; image_id: number | null; placement: string; active: number; ends_at: number | null; views: number; clicks: number }>()).results;
   return page(c, { title: "Admin", noindex: true }, (
@@ -117,6 +120,26 @@ admin.get("/", async (c) => {
         {adLeads.length === 0 ? <div class="card small muted">None yet. They come from the public Advertise page.</div> : <div class="card"><table><tr><th>Business</th><th>Contact</th><th>Message</th></tr>
           {adLeads.map((a) => <tr><td>{a.business}<div class="tiny muted">{when(a.created_at)}</div></td><td>{a.name}<div class="tiny muted">{a.phone}{a.email ? ` · ${a.email}` : ""}</div></td><td class="small" style="white-space:normal">{a.message}</td></tr>)}</table></div>}
       </section>
+      <section id="listings">
+        <h2 style="font-size:20px;margin-bottom:10px">Find and manage a listing</h2>
+        <div class="card">
+          <form method="get" action="/admin#listings" class="row"><input name="lq" value={lq} placeholder="Business name, GSTIN or listing address" style="flex:1" /><button class="btn sm" type="submit">Search</button></form>
+          {lq.length >= 3 && found.length === 0 && <p class="small muted">Nothing found.</p>}
+          {found.map((b) => <div style="border-top:1px solid var(--border);padding:10px 0;margin-top:10px">
+            <div class="row between"><span><a class="gold" href={`/b/${b.slug}`} target="_blank">{b.name}</a><div class="tiny muted">{b.city} · {b.source}{b.owner ? ` · owner: ${b.owner}` : " · unclaimed"}{b.has_contact ? " · has members-only contact" : ""}{b.plan === "premium" ? " · Premium" : ""}</div></span>
+              <span class="row">
+                {b.has_contact ? <form method="post" action={`/admin/listings/${b.id}/hide-contact`} data-confirm="Remove the members-only phone and email for this listing? This cannot be undone."><button class="btn ghost sm" type="submit">Remove contact</button></form> : null}
+                {b.owner ? <form method="post" action={`/admin/listings/${b.id}/release`} data-confirm="Remove the owner from this listing?"><button class="btn ghost sm" type="submit">Remove owner</button></form> : null}
+                <form method="post" action={`/admin/listings/${b.id}/delete`} data-confirm={`Delete the listing "${b.name}" and everything on it? This cannot be undone.`}><button class="btn danger sm" type="submit">Delete listing</button></form>
+              </span></div></div>)}
+        </div>
+      </section>
+      <section>
+        <h2 style="font-size:20px;margin-bottom:10px">Recent reviews</h2>
+        {revs.length === 0 ? <div class="card small muted">No reviews yet.</div> : <div class="card"><table><tr><th>Business</th><th>Review</th><th></th></tr>
+          {revs.map((r) => <tr style={r.status === "live" ? undefined : "opacity:.55"}><td><a class="gold" href={`/b/${r.slug}#reviews`} target="_blank">{r.bname}</a><div class="tiny muted">{r.uname} · {when(r.created_at)}</div></td><td class="small" style="white-space:normal">{"★".repeat(r.rating)} {r.body}</td>
+            <td><form method="post" action={`/admin/reviews/${r.id}/${r.status === "live" ? "hidden" : "live"}`}><button class="btn ghost sm" type="submit">{r.status === "live" ? "Hide" : "Show"}</button></form></td></tr>)}</table></div>}
+      </section>
       <section id="banners">
         <h2 style="font-size:20px;margin-bottom:10px">Banner ads and sponsors</h2>
         <div class="grid g2">
@@ -169,6 +192,17 @@ admin.post("/events", async (c) => {
   return back(c, "Event added");
 });
 admin.post("/events/:id/delete", async (c) => { await c.env.DB.prepare(`DELETE FROM events WHERE id = ?`).bind(Number(c.req.param("id"))).run(); return back(c, "Event deleted"); });
+admin.post("/reviews/:id/:action{live|hidden}", async (c) => {
+  await c.env.DB.prepare(`UPDATE reviews SET status = ? WHERE id = ?`).bind(c.req.param("action"), Number(c.req.param("id"))).run();
+  return back(c, "Review updated");
+});
+admin.post("/listings/:id/:action{hide-contact|release|delete}", async (c) => {
+  const id = Number(c.req.param("id")), action = c.req.param("action"), db = c.env.DB;
+  if (action === "hide-contact") { await db.batch([db.prepare(`DELETE FROM private_contacts WHERE business_id = ?`).bind(id), db.prepare(`DELETE FROM reveals WHERE business_id = ?`).bind(id)]); return back(c, "Members-only contact removed"); }
+  if (action === "release") { await db.prepare(`UPDATE businesses SET owner_id = NULL WHERE id = ?`).bind(id).run(); return back(c, "Owner removed"); }
+  await db.batch(["products", "links", "extras", "images", "enquiries", "claims", "payments", "business_types", "private_contacts", "reveals", "reviews", "reports", "claim_codes"].map((t) => db.prepare(`DELETE FROM ${t} WHERE business_id = ?`).bind(id)).concat(db.prepare(`DELETE FROM businesses WHERE id = ?`).bind(id)));
+  return back(c, "Listing deleted");
+});
 admin.post("/banners", async (c) => {
   const f = await c.req.parseBody();
   const title = String(f.title ?? "").trim().slice(0, 80), url = safeUrl(String(f.url ?? "").slice(0, 300));

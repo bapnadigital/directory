@@ -6,6 +6,7 @@ import { type AppEnv, clientIp } from "../auth";
 import { type Business, allow, isPremium, now, PLANS, PLAN_LIMITS, cacheBust } from "../db";
 import { Ad, Showcase, Sponsors } from "./ads";
 import { RateStrip } from "./rates";
+import { ReviewsBlock, loadReviews } from "./reviews";
 import { sendMail } from "../mail";
 import { LatestNews, LatestRequests } from "./market";
 import { TOOLS } from "./tools";
@@ -391,6 +392,7 @@ pub.get("/b/:slug", async (c) => {
   const revealed = pc && paid && viewer ? await hasReveal(db, viewer.id, b.id) : false;
   const usedToday = pc && paid && viewer ? await revealsToday(db, viewer.id) : 0;
   const cerr = c.req.query("cerr");
+  const rev = b.owner_id ? await loadReviews(db, b.id) : null;
   const verified = claimed ? !!(await db.prepare(`SELECT 1 FROM claims WHERE business_id = ? AND user_id = ? AND status = 'approved' LIMIT 1`).bind(b.id, b.owner_id).first()) : false;
   const similar = b.city_slug ? (await db.prepare(`SELECT ${CARD_COLS} FROM businesses b WHERE b.city_slug = ? AND b.id <> ? ${ORDER} LIMIT 6`).bind(b.city_slug, b.id).all<Card>()).results : [];
   const wa = claimed ? waNumber(b.whatsapp || b.phone) : null;
@@ -410,6 +412,7 @@ pub.get("/b/:slug", async (c) => {
     path: `/b/${b.slug}`,
     jsonld: { "@context": "https://schema.org", "@type": "JewelryStore", name: b.name, url,
       address: { "@type": "PostalAddress", addressLocality: b.city ?? undefined, streetAddress: claimed ? b.address ?? undefined : undefined, addressCountry: "IN" },
+      ...(rev && rev.count > 0 ? { aggregateRating: { "@type": "AggregateRating", ratingValue: Number(rev.avg.toFixed(1)), reviewCount: rev.count } } : {}),
       ...(b.logo_image ? { image: `${siteUrl(c)}/img/${b.logo_image}` } : {}) },
   }, (
     <main class="wrap" style="padding-top:26px">
@@ -420,6 +423,7 @@ pub.get("/b/:slug", async (c) => {
             <h1 style="font-size:28px">{b.name}</h1>
             <div class="muted small" style="margin-top:4px">📍 {b.city || "India"}{b.state && b.state !== b.city ? `, ${b.state}` : ""}{b.gst ? <> · GSTIN <span style="font-family:monospace">{b.gst}</span></> : null}</div>
             <div class="row" style="margin-top:10px;gap:6px">
+              {rev && rev.count > 0 && <a class="badge soft" href="#reviews">★ {rev.avg.toFixed(1)} ({rev.count})</a>}
               {premium && <span class="badge gold">★ Featured member</span>}
               {claimed ? <span class="badge ok">{verified ? "✓ Verified owner" : "✓ Claimed by owner"}</span> : <span class="badge">Unclaimed listing</span>}
               {b.gst_status && <span class="badge soft">GST {b.gst_status}</span>}
@@ -462,6 +466,8 @@ pub.get("/b/:slug", async (c) => {
               <div class="grid g3">{gallery.map((g) => <figure style="margin:0"><img src={`/img/${g.image_id}`} alt={g.title || `${b.name} photo`} loading="lazy" style="border-radius:14px;aspect-ratio:1;object-fit:cover;width:100%" />{g.title && <figcaption class="tiny muted">{g.title}</figcaption>}</figure>)}</div>
             </div>
           )}
+
+          {rev && <ReviewsBlock c={c} slug={b.slug} ownerId={b.owner_id!} data={rev} />}
 
           {faqs.length > 0 && (
             <div class="card"><h2 style="font-size:18px;margin-bottom:8px">FAQs</h2>

@@ -109,5 +109,15 @@ r = await anon("/requirements/new", { method: "POST", form: { title: "Smoke test
 ok("post requirement", r.status === 303 && /\/requirements\/\d+/.test(r.loc), r.loc);
 r = await anon(r.loc.split("?")[0].replace(BASE, "")); ok("requirement hides phone from public", r.status === 200 && !r.text.includes("9800000000"));
 r = await anon("/category/allied"); ok("allied category is not everything", r.status === 200);
+// reviews
+r = await other("/b/test-gold-jewellers/review", { method: "POST", form: { rating: "4", body: "Good finish, on-time delivery" } }); ok("review posted", r.loc.includes("rok="), r.loc);
+r = await other("/b/test-gold-jewellers/review", { method: "POST", form: { rating: "5", body: "Updated" } });
+r = await anon("/b/test-gold-jewellers"); ok("one review per user, shown with rating", r.text.includes("1 review<") && r.text.includes("aggregateRating") && r.text.includes("Updated"));
+await owner("/login", { method: "POST", form: { email: `owner-${uniq}@example.test`, password: "owner-pass-123" } });
+r = await owner("/b/test-gold-jewellers/review", { method: "POST", form: { rating: "5" } }); ok("owner cannot review own business", r.loc.includes("rerr="));
+r = await anon("/b/test-gold-jewellers/review", { method: "POST", form: { rating: "5" } }); ok("review needs sign-in", r.loc.includes("/login"));
+r = await other("/b/sparkle-diam/review", { method: "POST", form: { rating: "5" } }); ok("unclaimed listing takes no reviews", r.loc.includes("rerr="));
+r = await adminC("/admin?lq=sparkle"); ok("admin listing search", r.text.includes("Sparkle Diam") && r.text.includes("Delete listing"));
+r = await other("/admin/listings/1/delete", { method: "POST" }); ok("non-admin cannot delete listing", r.status !== 303 || !r.loc.includes("ok="));
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
