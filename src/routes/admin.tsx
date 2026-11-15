@@ -34,6 +34,7 @@ admin.get("/", async (c) => {
   const reports = (await db.prepare(`SELECT r.id, r.name, r.phone, r.message, r.created_at, b.name AS bname, b.slug FROM reports r JOIN businesses b ON b.id = r.business_id WHERE r.status = 'new' ORDER BY r.created_at DESC LIMIT 50`).all<{ id: number; name: string; phone: string; message: string | null; created_at: number; bname: string; slug: string }>()).results;
   const events = (await db.prepare(`SELECT id, title, city, starts_on FROM events ORDER BY starts_on DESC LIMIT 60`).all<{ id: number; title: string; city: string | null; starts_on: string }>()).results;
   const viewers = (await db.prepare(`SELECT u.name, u.email, count(*) AS n, (SELECT count(*) FROM reveals r2 WHERE r2.user_id = u.id) AS total FROM reveals r JOIN users u ON u.id = r.user_id WHERE r.day = ? GROUP BY u.id ORDER BY n DESC LIMIT 10`).bind(today()).all<{ name: string; email: string; n: number; total: number }>()).results;
+  const adLeads = (await db.prepare(`SELECT name, business, phone, email, message, created_at FROM ad_leads ORDER BY created_at DESC LIMIT 20`).all<{ name: string; business: string; phone: string; email: string | null; message: string | null; created_at: number }>()).results;
   const reqs = (await db.prepare(`SELECT id, title, city, name, phone, status, views, created_at FROM requests ORDER BY created_at DESC LIMIT 30`).all<{ id: number; title: string; city: string | null; name: string; phone: string; status: string; views: number; created_at: number }>()).results;
   const banners = (await db.prepare(`SELECT id, title, url, image_id, placement, active, ends_at, views, clicks FROM banners ORDER BY placement, position, id DESC LIMIT 100`).all<{ id: number; title: string; url: string; image_id: number | null; placement: string; active: number; ends_at: number | null; views: number; clicks: number }>()).results;
   return page(c, { title: "Admin", noindex: true }, (
@@ -110,6 +111,11 @@ admin.get("/", async (c) => {
           </form>
           <div class="card"><b>Listed events ({events.length})</b>{events.length === 0 ? <p class="small muted">None yet. They appear on the public Events page.</p> : events.map((e) => <div class="row between" style="border-top:1px solid var(--border);padding:8px 0"><span class="small">{e.title}<div class="tiny muted">{e.starts_on} · {e.city}</div></span><form method="post" action={`/admin/events/${e.id}/delete`} data-confirm="Delete this event?"><button class="btn danger sm" type="submit">Delete</button></form></div>)}</div>
         </div>
+      </section>
+      <section>
+        <h2 style="font-size:20px;margin-bottom:10px">Advertising enquiries ({adLeads.length})</h2>
+        {adLeads.length === 0 ? <div class="card small muted">None yet. They come from the public Advertise page.</div> : <div class="card"><table><tr><th>Business</th><th>Contact</th><th>Message</th></tr>
+          {adLeads.map((a) => <tr><td>{a.business}<div class="tiny muted">{when(a.created_at)}</div></td><td>{a.name}<div class="tiny muted">{a.phone}{a.email ? ` · ${a.email}` : ""}</div></td><td class="small" style="white-space:normal">{a.message}</td></tr>)}</table></div>}
       </section>
       <section id="banners">
         <h2 style="font-size:20px;margin-bottom:10px">Banner ads and sponsors</h2>

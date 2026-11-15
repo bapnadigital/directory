@@ -1,8 +1,9 @@
 /** @jsxImportSource hono/jsx */
 import { Hono, type Context } from "hono";
+import type { Child } from "hono/jsx";
 import QRCode from "qrcode-svg";
 import { type AppEnv, clientIp } from "../auth";
-import { type Business, allow, isPremium, now, PLANS, PLAN_LIMITS } from "../db";
+import { type Business, allow, isPremium, now, PLANS, PLAN_LIMITS, cacheBust } from "../db";
 import { Ad, Showcase, Sponsors } from "./ads";
 import { RateStrip } from "./rates";
 import { sendMail } from "../mail";
@@ -56,7 +57,7 @@ let homeCache: { at: number; featured: D1Result<Card>; latest: D1Result<Card>; t
 const SPECIALITIES = [["Gold", "gold"], ["Diamond", "diam"], ["Silver", "silver"], ["Antique & Kundan", "kundan"], ["Chains", "chain"], ["Bangles", "bangle"], ["Mangalsutra", "mangalsutra"], ["Temple jewellery", "temple"], ["Polki", "polki"], ["Platinum", "platinum"], ["Gemstones", "gems"], ["Pearls", "pearl"], ["Casting", "casting"], ["Imitation", "imitation"], ["Bullion", "bullion"], ["Ornaments", "ornament"]];
 pub.get("/", async (c) => {
   const db = c.env.DB;
-  if (!homeCache || Date.now() - homeCache.at > 60000) {
+  if (!homeCache || Date.now() - homeCache.at > 60000 || homeCache.at <= cacheBust.home) {
     const [f, l, t] = await Promise.all([
       db.prepare(`SELECT ${CARD_COLS} FROM businesses b WHERE b.plan = 'premium' AND (b.plan_expires IS NULL OR b.plan_expires > ?) ORDER BY random() LIMIT 4`).bind(now()).all<Card>(),
       db.prepare(`SELECT ${CARD_COLS} FROM businesses b ${ORDER} LIMIT 8`).all<Card>(),
@@ -163,7 +164,7 @@ pub.get("/", async (c) => {
 });
 
 // ───────────────────────── Directory ─────────────────────────
-function listing(title: string, sub: string, basePath: string, f: Filters, pageNo: number, data: { rows: Card[]; total: number }, showFilters: boolean, c: Context<AppEnv>) {
+function listing(title: string, sub: string, basePath: string, f: Filters, pageNo: number, data: { rows: Card[]; total: number }, showFilters: boolean, c: Context<AppEnv>, extra?: Child) {
   const qs = (p: number) => {
     const u = new URLSearchParams();
     if (f.q) u.set("q", f.q);
@@ -181,6 +182,7 @@ function listing(title: string, sub: string, basePath: string, f: Filters, pageN
     <main class="wrap" style="padding-top:26px">
       <h1 style="font-size:30px">{title}</h1>
       <p class="muted small">{data.total.toLocaleString("en-IN")} businesses. {sub}</p>
+      {extra}
       <div class="layout" style="margin-top:18px">
         <aside class="card">
           <form method="get" action={basePath}>
@@ -251,7 +253,21 @@ pub.get("/city/:slug", async (c) => {
     path: `/city/${city.slug}`, noindex: p > 1 || !!f.q || !!f.sort,
     jsonld: { "@context": "https://schema.org", "@type": "ItemList", name: `Jewellers in ${city.label}`, numberOfItems: data.total,
       itemListElement: data.rows.slice(0, 20).map((b, i) => ({ "@type": "ListItem", position: i + 1, name: b.name, url: `${siteUrl(c)}/b/${b.slug}` })) },
-  }, listing(`Jewellers in ${city.label}`, city.note, `/city/${city.slug}`, f, p, data, false, c));
+  }, listing(`Jewellers in ${city.label}`, city.note, `/city/${city.slug}`, f, p, data, false, c,
+    findCity(city.slug) ? <div class="row" style="gap:6px;margin:10px 0 0">{TRADE_TYPES.map((x) => <a class="badge" href={`/city/${city.slug}/${x.slug}`}>{x.label}</a>)}</div> : undefined));
+});
+
+pub.get("/city/:slug/:type", async (c) => {
+  const city = findCity(c.req.param("slug")), t = findType(c.req.param("type"));
+  if (!city || !t) return c.notFound();
+  const f: Filters = { q: c.req.query("q"), city: city.slug, type: t.slug };
+  const p = pageNum(c.req.query("page"));
+  const data = await search(c.env.DB, f, p);
+  return page(c, {
+    title: `${t.label} in ${city.label}`, desc: `${data.total.toLocaleString("en-IN")} ${t.label.toLowerCase()} in ${city.label} (${city.note}). View details and contact options.`,
+    path: `/city/${city.slug}/${t.slug}`, noindex: p > 1 || !!f.q || data.total < 3,
+  }, listing(`${t.label} in ${city.label}`, city.note, `/city/${city.slug}/${t.slug}`, f, p, data, false, c,
+    <div class="row" style="gap:6px;margin:10px 0 0"><a class="badge" href={`/city/${city.slug}`}>All in {city.label}</a>{TRADE_TYPES.map((x) => <a class={`badge ${x.slug === t.slug ? "gold" : ""}`} href={`/city/${city.slug}/${x.slug}`}>{x.label}</a>)}</div>));
 });
 
 pub.get("/category/:slug", async (c) => {
@@ -479,7 +495,7 @@ pub.get("/b/:slug", async (c) => {
           {!claimed && b.source === "jt2023" && b.address && (
             <div class="card small"><b>Address</b><p class="muted" style="margin:2px 0;white-space:pre-line">{b.address}</p></div>
           )}
-          {claimed && <a class="tiny muted" href={`/b/${b.slug}/report`} rel="nofollow">Not the real owner? Report this listing</a>}
+          <a class="tiny muted" href={`/b/${b.slug}/report`} rel="nofollow">{claimed ? "Not the real owner? Report this listing" : "Report or request removal"}</a>
           {claimed && (b.address || b.hours) && (
             <div class="card small">
               {b.address && <><b>Address</b><p class="muted" style="margin:2px 0 10px;white-space:pre-line">{b.address}</p></>}
@@ -672,19 +688,6 @@ pub.get("/pricing", (c) => page(c, { title: "Membership plans", desc: "Free and 
   </main>
 )));
 
-const legal = (title: string, paras: string[]) => (c: Context<AppEnv>) =>
-  page(c, { title, path: `/${title.toLowerCase()}` }, <main class="wrap narrow" style="padding-top:36px"><h1 style="font-size:30px">{title}</h1>{paras.map((p) => <p class="muted">{p}</p>)}</main>);
-pub.get("/terms", legal("Terms", [
-  "This directory lists jewellery businesses using publicly available registration details and information supplied by business owners.",
-  "Listings are provided for information only. Verify a business independently before dealing. We are not a party to any transaction between users.",
-  "Owners are responsible for the accuracy of what they publish. We may remove content that is misleading, unlawful or abusive.",
-]));
-pub.get("/privacy", legal("Privacy", [
-  "We store the account details you give us (name, email, phone) to run your account, and enquiry details so the business you contacted can reply.",
-  "Enquiry phone numbers are shown only to the business the enquiry was sent to. We do not sell contact details.",
-  "To correct or remove a listing or your account, contact us through the business that operates this site.",
-]));
-
 // ───────────────────────── SEO files ─────────────────────────
 pub.get("/robots.txt", (c) => c.text(`User-agent: *\nAllow: /\nDisallow: /dashboard\nDisallow: /admin\nDisallow: /go/\nDisallow: /*/contact\nDisallow: /*/call\n\nSitemap: ${siteUrl(c)}/sitemap.xml\n`));
 
@@ -699,7 +702,7 @@ pub.get("/sitemap/:file", async (c) => {
   const file = c.req.param("file");
   const base = siteUrl(c);
   const xml = (urls: string[]) => c.body(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map((u) => `<url><loc>${base}${u}</loc></url>`).join("\n")}\n</urlset>`, 200, { "content-type": "application/xml", "cache-control": "public, max-age=3600" });
-  if (file === "pages.xml") return xml(["/", "/directory", "/cities", "/pricing", "/rates", "/tools", "/states", "/categories", "/requirements", "/news", "/events", ...TOOLS.map((t) => `/tools/${t.slug}`), ...STATES.slice(0, 22).map((x) => `/state/${x.slug}`), ...CITIES.map((x) => `/city/${x.slug}`), ...TRADE_TYPES.map((t) => `/category/${t.slug}`)]);
+  if (file === "pages.xml") return xml(["/", "/directory", "/cities", "/pricing", "/rates", "/tools", "/states", "/categories", "/requirements", "/news", "/events", "/about", "/advertise", ...CITIES.flatMap((ct) => ["manufacturer", "wholesaler", "retailer", "bullion", "diamonds", "silver", "chains", "hallmarking", "refiner"].map((t) => `/city/${ct.slug}/${t}`)), ...TOOLS.map((t) => `/tools/${t.slug}`), ...STATES.slice(0, 22).map((x) => `/state/${x.slug}`), ...CITIES.map((x) => `/city/${x.slug}`), ...TRADE_TYPES.map((t) => `/category/${t.slug}`)]);
   const m = /^b-(\d{1,3})\.xml$/.exec(file);
   if (!m) return c.notFound();
   const i = parseInt(m[1]!, 10);

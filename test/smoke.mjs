@@ -102,7 +102,7 @@ if (isFirstRun) {
   r = await owner("/logout", { method: "POST" }); r = await owner("/dashboard"); ok("logout works", r.status === 302);
 }
 // newer sections
-for (const u of ["/rates", "/api/rates", "/tools", "/tools/gold-price-calculator", "/tools/bullion-rate-converter", "/requirements", "/requirements/new", "/news", "/events", "/states", "/categories", "/cities", "/widget/rates", "/sitemap/pages.xml"]) {
+for (const u of ["/rates", "/api/rates", "/tools", "/tools/gold-price-calculator", "/tools/bullion-rate-converter", "/requirements", "/requirements/new", "/news", "/events", "/states", "/categories", "/cities", "/widget/rates", "/sitemap/pages.xml", "/about", "/advertise", "/terms", "/privacy", "/city/mumbai/bullion", "/city/mumbai/retailer"]) {
   r = await anon(u); ok(`GET ${u}`, r.status === 200, String(r.status));
 }
 r = await anon("/requirements/new", { method: "POST", form: { title: "Smoke test requirement 22K chains", city: "Mumbai", name: "Smoke", phone: "9800000000" } });

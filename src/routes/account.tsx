@@ -2,7 +2,7 @@
 import { Hono, type Context } from "hono";
 import type { Child } from "hono/jsx";
 import { type AppEnv, clientIp, endSession, hashPassword, requireUser, startSession, verifyPassword } from "../auth";
-import { type Business, type PlanKey, PLANS, allow, isPremium, limits, now, slugify } from "../db";
+import { type Business, type PlanKey, PLANS, allow, isPremium, limits, now, slugify, cacheBust } from "../db";
 import { CITIES, THEMES, TRADE_TYPES, safeUrl, stateFromGst } from "../content";
 import { Field, Flash, page, siteUrl } from "../ui";
 
@@ -606,6 +606,7 @@ const cfBase = (env: AppEnv["Bindings"]) => ((env.CASHFREE_ENV ?? "production").
 const cfHeaders = (env: AppEnv["Bindings"]) => ({ "content-type": "application/json", "x-api-version": "2023-08-01", "x-client-id": env.CASHFREE_APP_ID!, "x-client-secret": env.CASHFREE_SECRET! });
 
 export async function activatePlan(db: D1Database, businessId: number, plan: PlanKey) {
+  cacheBust.home = Date.now();
   const cur = await db.prepare(`SELECT plan, plan_expires FROM businesses WHERE id = ?`).bind(businessId).first<{ plan: string; plan_expires: number | null }>();
   const from = cur && cur.plan === "premium" && cur.plan_expires && cur.plan_expires > now() ? cur.plan_expires : now();
   await db.prepare(`UPDATE businesses SET plan = 'premium', plan_expires = ? WHERE id = ?`).bind(from + PLANS[plan].days * 86400, businessId).run();

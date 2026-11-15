@@ -15,7 +15,7 @@ export type Env = {
   CASHFREE_ENV?: string;
 };
 
-const SCHEMA_VERSION = "8";
+const SCHEMA_VERSION = "9";
 
 const SCHEMA: string[] = [
   `CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
@@ -104,6 +104,7 @@ const SCHEMA: string[] = [
      id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, city TEXT, venue TEXT, starts_on TEXT NOT NULL, ends_on TEXT,
      url TEXT, details TEXT, created_at INTEGER NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS events_idx ON events (starts_on)`,
+  `CREATE TABLE IF NOT EXISTS ad_leads (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, business TEXT NOT NULL, phone TEXT NOT NULL, email TEXT, message TEXT, created_at INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS rate_history (ts INTEGER PRIMARY KEY, gold995gst REAL, silver_gst REAL, gold_usd REAL, usd_inr REAL)`,
 ];
 
@@ -185,3 +186,6 @@ export const PLANS = {
   premium_yearly: { label: "Premium — yearly", amount: 9999, days: 366 },
 } as const;
 export type PlanKey = keyof typeof PLANS;
+
+/** Set to Date.now() when something shown on the home page changes, so cached home data is rebuilt. */
+export const cacheBust = { home: 0 };
