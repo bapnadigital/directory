@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import type { AppEnv } from "../auth";
 import { RATE_SOURCE, getRates, inr, keyRates, perGram } from "../rates";
-import { page } from "../ui";
+import { page, siteUrl } from "../ui";
 
 export const ratesApp = new Hono<AppEnv>();
 const when = (t: number) => new Date(t * 1000).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
@@ -42,6 +42,7 @@ ratesApp.get("/rates", async (c) => {
   const r = await getRates(c.env);
   const k = keyRates(r);
   const g = perGram(k);
+  const base = siteUrl(c);
   const hist = (await c.env.DB.prepare(`SELECT ts, gold995gst, silver_gst FROM rate_history WHERE ts > ? ORDER BY ts`).bind(Math.floor(Date.now() / 1000) - 7 * 86400).all<{ ts: number; gold995gst: number | null; silver_gst: number | null }>()).results;
   const gp = hist.map((x) => x.gold995gst).filter((x): x is number => x != null), sp = hist.map((x) => x.silver_gst).filter((x): x is number => x != null);
   const chart = (title: string, pts: number[], unit: string) => pts.length >= 4 ? (
@@ -100,6 +101,20 @@ ratesApp.get("/rates", async (c) => {
         <div class="row" style="justify-content:center"><a class="btn" href={RATE_SOURCE.url} target="_blank" rel="noopener">Open the bullion desk</a><a class="btn ghost" href={RATE_SOURCE.outlook} target="_blank" rel="noopener">Daily gold and silver outlook</a></div>
       </div>
 
+      <div class="grid g2" style="margin-top:16px">
+        <div class="card">
+          <b>Share today's rate</b>
+          <p class="small muted">Send the current rate to your customers or groups on WhatsApp.</p>
+          <a class="btn wa sm" target="_blank" rel="noopener" href={`https://wa.me/?text=${encodeURIComponent(`Gold and silver rates (${r ? when(r.at) : "today"})\nGold 995 with GST: ${inr(k.gold995gst)} per 10 g\nGold 995 without GST: ${inr(k.gold995)} per 10 g\nSilver 999 with GST: ${inr(k.silverGst)} per kg\n\nLive rates by ${RATE_SOURCE.name}: ${base}/rates`)}`}>Share on WhatsApp</a>
+        </div>
+        <div class="card">
+          <b>Show live rates on your website</b>
+          <p class="small muted">Free for jewellers. Copy this code into your website and the rates update by themselves.</p>
+          <textarea readonly rows={3} style="font-family:monospace;font-size:12px" onclick="this.select()">{`<iframe src="${base}/widget/rates" width="100%" height="230" style="border:0;max-width:420px" loading="lazy" title="Live gold and silver rates"></iframe>`}</textarea>
+          <button class="btn ghost sm" style="margin-top:8px" data-copy={`<iframe src="${base}/widget/rates" width="100%" height="230" style="border:0;max-width:420px" loading="lazy" title="Live gold and silver rates"></iframe>`}>Copy code</button>
+        </div>
+      </div>
+
       <div class="grid g3" style="margin-top:16px">
         <a class="card" href="/tools/gold-price-calculator"><b>🧮 Gold price calculator</b><p class="small muted">Weight, purity, making and GST at today's rate.</p></a>
         <a class="card" href="/tools/bullion-rate-converter"><b>🔁 995 / 999 rate converter</b><p class="small muted">Compare rates with and without GST on one basis.</p></a>
@@ -107,5 +122,21 @@ ratesApp.get("/rates", async (c) => {
       </div>
       <p class="tiny muted" style="margin-top:16px">Rates are indicative and for information only. Confirm the final rate with the dealer before any transaction.</p>
     </main>
+  ));
+});
+
+// Embeddable rate card for jewellers' own websites.
+ratesApp.get("/widget/rates", async (c) => {
+  const r = await getRates(c.env);
+  const k = keyRates(r), g = perGram(k), base = siteUrl(c);
+  return page(c, { title: "Live gold and silver rates", noindex: true, bare: true, bodyStyle: "background:#141432;margin:0" }, (
+    <div style="padding:14px;font-size:14px">
+      <div class="row between"><b><i class="dot" /> Live rates</b><span class="tiny muted" data-rate-at>{r ? when(r.at) : ""}</span></div>
+      <div class="kv"><span>Gold 995 with GST / 10 g</span><b class="gold" data-rate="gold995gst">{inr(k.gold995gst)}</b></div>
+      <div class="kv"><span>22K (916) per gram</span><b class="gold" data-gram="k22">{g ? inr(g.k22) : "—"}</b></div>
+      <div class="kv"><span>24K (999) per gram</span><b class="gold" data-gram="k24">{g ? inr(g.k24) : "—"}</b></div>
+      <div class="kv"><span>Silver 999 with GST / kg</span><b class="gold" data-rate="silverGst">{inr(k.silverGst)}</b></div>
+      <div class="tiny muted" style="margin-top:8px">Rates by <a class="gold" href={RATE_SOURCE.url} target="_blank" rel="noopener">{RATE_SOURCE.name}</a> · <a class="gold" href={`${base}/rates`} target="_blank" rel="noopener">jewellerysahihai.com</a></div>
+    </div>
   ));
 });

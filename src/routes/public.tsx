@@ -68,7 +68,7 @@ pub.get("/", async (c) => {
   }, (
     <main>
       <section class="hero wrap">
-        <div class="eyebrow">India's jewellery trade directory</div>
+        <div class="eyebrow">India's jewellery, bullion and allied trade directory</div>
         <h1 style="margin-top:14px">Find the right jeweller<br /><em>before you deal.</em></h1>
         <p class="muted" style="max-width:560px;margin:16px auto 0">
           {n > 0 ? `${n.toLocaleString("en-IN")} jewellery businesses. ` : ""}Search by name, GSTIN or city. View catalogues, send enquiries and order on WhatsApp — free.
@@ -347,6 +347,7 @@ pub.get("/b/:slug", async (c) => {
   const revealed = pc && paid && viewer ? await hasReveal(db, viewer.id, b.id) : false;
   const usedToday = pc && paid && viewer ? await revealsToday(db, viewer.id) : 0;
   const cerr = c.req.query("cerr");
+  const similar = b.city_slug ? (await db.prepare(`SELECT ${CARD_COLS} FROM businesses b WHERE b.city_slug = ? AND b.id <> ? ${ORDER} LIMIT 6`).bind(b.city_slug, b.id).all<Card>()).results : [];
   const wa = claimed ? waNumber(b.whatsapp || b.phone) : null;
   const web = claimed ? safeUrl(b.website) : null;
   const gallery = extras.results.filter((e) => e.kind === "gallery" && e.image_id);
@@ -372,7 +373,7 @@ pub.get("/b/:slug", async (c) => {
           <div class="biz" style="width:96px;flex:none"><div class="top" style="margin:0;height:96px;border-radius:20px">{b.logo_image ? <img src={`/img/${b.logo_image}`} alt="" /> : initials(b.name)}</div></div>
           <div style="flex:1;min-width:220px">
             <h1 style="font-size:28px">{b.name}</h1>
-            <div class="muted small" style="margin-top:4px">📍 {b.city || "India"}{b.gst ? <> · GSTIN <span style="font-family:monospace">{b.gst}</span></> : null}</div>
+            <div class="muted small" style="margin-top:4px">📍 {b.city || "India"}{b.state && b.state !== b.city ? `, ${b.state}` : ""}{b.gst ? <> · GSTIN <span style="font-family:monospace">{b.gst}</span></> : null}</div>
             <div class="row" style="margin-top:10px;gap:6px">
               {premium && <span class="badge gold">★ Featured member</span>}
               {claimed ? <span class="badge ok">✓ Claimed by owner</span> : <span class="badge">Unclaimed listing</span>}
@@ -419,6 +420,13 @@ pub.get("/b/:slug", async (c) => {
           {faqs.length > 0 && (
             <div class="card"><h2 style="font-size:18px;margin-bottom:8px">FAQs</h2>
               {faqs.map((q) => <details style="padding:8px 0;border-top:1px solid var(--border)"><summary>{q.title}</summary><p class="small muted" style="white-space:pre-line">{q.body}</p></details>)}
+            </div>
+          )}
+
+          {similar.length > 0 && (
+            <div><h2 style="font-size:20px;margin-bottom:12px">More jewellers in {b.city}</h2>
+              <div class="grid g3">{similar.map((s) => <BizCard b={s} />)}</div>
+              {b.city_slug && <p class="small" style="margin-top:10px"><a class="gold" href={`/city/${b.city_slug}`}>All businesses in {b.city} →</a></p>}
             </div>
           )}
 

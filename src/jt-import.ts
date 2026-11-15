@@ -1,4 +1,4 @@
-import { JT_CHUNKS, JT_TOTAL } from "./data/jt-index";
+import { JT_ALLIED, JT_CHUNKS, JT_TOTAL } from "./data/jt-index";
 import { type Env, getMeta, now, setMeta } from "./db";
 import { citySlug } from "./import";
 
@@ -25,4 +25,14 @@ export async function importJtBatch(env: Env, chunks = 1): Promise<{ done: boole
     await setMeta(env, "jt_chunk", String(i + 1));
   }
   return { done: i >= JT_CHUNKS.length, chunk: i, of: JT_CHUNKS.length };
+}
+
+/** One-time: tag listings from the directory's Allied Section so they appear under "Allied services". */
+export async function tagAllied(env: Env): Promise<void> {
+  if ((await getMeta(env, "jt_allied")) === "1") return;
+  const slugs = JSON.parse(JT_ALLIED) as string[];
+  if (!slugs.length) return;
+  const stmts = slugs.map((s) => env.DB.prepare(`INSERT OR IGNORE INTO business_types (business_id, type) SELECT id, 'allied' FROM businesses WHERE slug = ? AND source = 'jt2023'`).bind(s));
+  for (let i = 0; i < stmts.length; i += 100) await env.DB.batch(stmts.slice(i, i + 100));
+  await setMeta(env, "jt_allied", "1");
 }
