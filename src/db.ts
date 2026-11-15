@@ -15,7 +15,7 @@ export type Env = {
   CASHFREE_ENV?: string;
 };
 
-const SCHEMA_VERSION = "6";
+const SCHEMA_VERSION = "7";
 
 const SCHEMA: string[] = [
   `CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
@@ -100,6 +100,10 @@ const SCHEMA: string[] = [
   `CREATE TABLE IF NOT EXISTS news (
      id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, url TEXT NOT NULL UNIQUE, source TEXT, topic TEXT, published_at INTEGER NOT NULL, created_at INTEGER NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS news_pub_idx ON news (published_at)`,
+  `CREATE TABLE IF NOT EXISTS events (
+     id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, city TEXT, venue TEXT, starts_on TEXT NOT NULL, ends_on TEXT,
+     url TEXT, details TEXT, created_at INTEGER NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS events_idx ON events (starts_on)`,
   `CREATE TABLE IF NOT EXISTS rate_history (ts INTEGER PRIMARY KEY, gold995gst REAL, silver_gst REAL, gold_usd REAL, usd_inr REAL)`,
 ];
 

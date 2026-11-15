@@ -5,6 +5,7 @@ import { type AppEnv, clientIp } from "../auth";
 import { type Business, allow, isPremium, now, PLANS, PLAN_LIMITS } from "../db";
 import { Ad, Sponsors } from "./ads";
 import { RateStrip } from "./rates";
+import { sendMail } from "../mail";
 import { LatestNews, LatestRequests } from "./market";
 import { TOOLS } from "./tools";
 import { DAILY_REVEALS, hasReveal, isPaidMember, revealsToday } from "./contact";
@@ -347,6 +348,7 @@ pub.get("/b/:slug", async (c) => {
   const revealed = pc && paid && viewer ? await hasReveal(db, viewer.id, b.id) : false;
   const usedToday = pc && paid && viewer ? await revealsToday(db, viewer.id) : 0;
   const cerr = c.req.query("cerr");
+  const verified = claimed ? !!(await db.prepare(`SELECT 1 FROM claims WHERE business_id = ? AND user_id = ? AND status = 'approved' LIMIT 1`).bind(b.id, b.owner_id).first()) : false;
   const similar = b.city_slug ? (await db.prepare(`SELECT ${CARD_COLS} FROM businesses b WHERE b.city_slug = ? AND b.id <> ? ${ORDER} LIMIT 6`).bind(b.city_slug, b.id).all<Card>()).results : [];
   const wa = claimed ? waNumber(b.whatsapp || b.phone) : null;
   const web = claimed ? safeUrl(b.website) : null;
@@ -376,7 +378,7 @@ pub.get("/b/:slug", async (c) => {
             <div class="muted small" style="margin-top:4px">📍 {b.city || "India"}{b.state && b.state !== b.city ? `, ${b.state}` : ""}{b.gst ? <> · GSTIN <span style="font-family:monospace">{b.gst}</span></> : null}</div>
             <div class="row" style="margin-top:10px;gap:6px">
               {premium && <span class="badge gold">★ Featured member</span>}
-              {claimed ? <span class="badge ok">✓ Claimed by owner</span> : <span class="badge">Unclaimed listing</span>}
+              {claimed ? <span class="badge ok">{verified ? "✓ Verified owner" : "✓ Claimed by owner"}</span> : <span class="badge">Unclaimed listing</span>}
               {b.gst_status && <span class="badge soft">GST {b.gst_status}</span>}
               {b.gst_since && <span class="badge">Since {b.gst_since.slice(0, 4)}</span>}
               {types.results.map((t) => <a class="badge soft" href={`/category/${t.type}`}>{findType(t.type)?.label ?? t.type}</a>)}
@@ -514,6 +516,13 @@ pub.post("/b/:slug/enquiry", async (c) => {
   const pid = /^\d+$/.test(String(f.product_id ?? "")) ? Number(f.product_id) : null;
   await c.env.DB.prepare(`INSERT INTO enquiries (business_id, product_id, name, phone, message, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
     .bind(b.id, pid, name, phone, message || null, now()).run();
+  if (b.owner_id) {
+    const reqUrl = c.req.url, brand = c.env.BRAND_NAME;
+    c.executionCtx.waitUntil((async () => {
+      const owner = await c.env.DB.prepare(`SELECT email FROM users WHERE id = ?`).bind(b.owner_id).first<{ email: string }>();
+      await sendMail(c.env, reqUrl, owner?.email, `New enquiry for ${b.name}`, `You have a new enquiry on ${brand}.\n\nFrom: ${name}\nMobile: ${phone}\n${message ? `Message: ${message}\n` : ""}\nOpen your enquiries: ${siteUrl(c)}/dashboard/enquiries`);
+    })());
+  }
   return back("sent=1");
 });
 
@@ -668,7 +677,7 @@ pub.get("/sitemap/:file", async (c) => {
   const file = c.req.param("file");
   const base = siteUrl(c);
   const xml = (urls: string[]) => c.body(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map((u) => `<url><loc>${base}${u}</loc></url>`).join("\n")}\n</urlset>`, 200, { "content-type": "application/xml", "cache-control": "public, max-age=3600" });
-  if (file === "pages.xml") return xml(["/", "/directory", "/cities", "/pricing", "/rates", "/tools", "/states", "/categories", "/requirements", "/news", ...TOOLS.map((t) => `/tools/${t.slug}`), ...STATES.slice(0, 22).map((x) => `/state/${x.slug}`), ...CITIES.map((x) => `/city/${x.slug}`), ...TRADE_TYPES.map((t) => `/category/${t.slug}`)]);
+  if (file === "pages.xml") return xml(["/", "/directory", "/cities", "/pricing", "/rates", "/tools", "/states", "/categories", "/requirements", "/news", "/events", ...TOOLS.map((t) => `/tools/${t.slug}`), ...STATES.slice(0, 22).map((x) => `/state/${x.slug}`), ...CITIES.map((x) => `/city/${x.slug}`), ...TRADE_TYPES.map((t) => `/category/${t.slug}`)]);
   const m = /^b-(\d{1,3})\.xml$/.exec(file);
   if (!m) return c.notFound();
   const i = parseInt(m[1]!, 10);

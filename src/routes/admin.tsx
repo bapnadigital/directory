@@ -31,6 +31,7 @@ admin.get("/", async (c) => {
   const jtChunks = JT_CHUNKS.length;
   const docs = new Set((await db.prepare(`SELECT claim_id FROM claim_docs`).all<{ claim_id: number }>()).results.map((r) => r.claim_id));
   const reports = (await db.prepare(`SELECT r.id, r.name, r.phone, r.message, r.created_at, b.name AS bname, b.slug FROM reports r JOIN businesses b ON b.id = r.business_id WHERE r.status = 'new' ORDER BY r.created_at DESC LIMIT 50`).all<{ id: number; name: string; phone: string; message: string | null; created_at: number; bname: string; slug: string }>()).results;
+  const events = (await db.prepare(`SELECT id, title, city, starts_on FROM events ORDER BY starts_on DESC LIMIT 60`).all<{ id: number; title: string; city: string | null; starts_on: string }>()).results;
   const reqs = (await db.prepare(`SELECT id, title, city, name, phone, status, views, created_at FROM requests ORDER BY created_at DESC LIMIT 30`).all<{ id: number; title: string; city: string | null; name: string; phone: string; status: string; views: number; created_at: number }>()).results;
   const banners = (await db.prepare(`SELECT id, title, url, image_id, placement, active, ends_at, views, clicks FROM banners ORDER BY placement, position, id DESC LIMIT 100`).all<{ id: number; title: string; url: string; image_id: number | null; placement: string; active: number; ends_at: number | null; views: number; clicks: number }>()).results;
   return page(c, { title: "Admin", noindex: true }, (
@@ -88,6 +89,21 @@ admin.get("/", async (c) => {
           {reqs.map((r) => <tr><td style="white-space:normal"><a class="gold" href={`/requirements/${r.id}`} target="_blank">{r.title}</a><div class="tiny muted">{r.city} · {when(r.created_at)} · {r.status}</div></td><td>{r.name}<div class="tiny muted">{r.phone}</div></td><td>{r.views}</td>
             <td><form method="post" action={`/admin/requests/${r.id}/${r.status === "hidden" ? "open" : "hidden"}`}><button class="btn ghost sm" type="submit">{r.status === "hidden" ? "Show" : "Hide"}</button></form></td></tr>)}</table></div>}
       </section>
+      <section>
+        <h2 style="font-size:20px;margin-bottom:10px">Events</h2>
+        <div class="grid g2">
+          <form class="card" method="post" action="/admin/events">
+            <b>Add an event</b>
+            <label>Event name<input name="title" required maxlength={120} /></label>
+            <div class="grid g2"><label>Starts<input name="starts_on" type="date" required /></label><label>Ends<input name="ends_on" type="date" /></label></div>
+            <div class="grid g2"><label>City<input name="city" maxlength={60} /></label><label>Venue<input name="venue" maxlength={120} /></label></div>
+            <label>Organiser's website<input name="url" type="url" maxlength={300} placeholder="https://" /></label>
+            <label>Details (optional)<textarea name="details" rows={2} maxlength={600}></textarea></label>
+            <button class="btn sm" type="submit">Add event</button>
+          </form>
+          <div class="card"><b>Listed events ({events.length})</b>{events.length === 0 ? <p class="small muted">None yet. They appear on the public Events page.</p> : events.map((e) => <div class="row between" style="border-top:1px solid var(--border);padding:8px 0"><span class="small">{e.title}<div class="tiny muted">{e.starts_on} · {e.city}</div></span><form method="post" action={`/admin/events/${e.id}/delete`} data-confirm="Delete this event?"><button class="btn danger sm" type="submit">Delete</button></form></div>)}</div>
+        </div>
+      </section>
       <section id="banners">
         <h2 style="font-size:20px;margin-bottom:10px">Banner ads and sponsors</h2>
         <div class="grid g2">
@@ -130,6 +146,16 @@ admin.post("/requests/:id/:action{open|hidden}", async (c) => {
   await c.env.DB.prepare(`UPDATE requests SET status = ? WHERE id = ?`).bind(c.req.param("action"), Number(c.req.param("id"))).run();
   return back(c, "Requirement updated");
 });
+admin.post("/events", async (c) => {
+  const f = await c.req.parseBody();
+  const v = (k: string, n: number) => String(f[k] ?? "").trim().slice(0, n);
+  const isDate = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d);
+  if (!v("title", 120) || !isDate(v("starts_on", 10))) return back(c, "Event needs a name and a start date", true);
+  await c.env.DB.prepare(`INSERT INTO events (title, city, venue, starts_on, ends_on, url, details, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(v("title", 120), v("city", 60) || null, v("venue", 120) || null, v("starts_on", 10), isDate(v("ends_on", 10)) ? v("ends_on", 10) : null, safeUrl(v("url", 300)), v("details", 600) || null, now()).run();
+  return back(c, "Event added");
+});
+admin.post("/events/:id/delete", async (c) => { await c.env.DB.prepare(`DELETE FROM events WHERE id = ?`).bind(Number(c.req.param("id"))).run(); return back(c, "Event deleted"); });
 admin.post("/banners", async (c) => {
   const f = await c.req.parseBody();
   const title = String(f.title ?? "").trim().slice(0, 80), url = safeUrl(String(f.url ?? "").slice(0, 300));

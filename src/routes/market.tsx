@@ -2,7 +2,7 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { type AppEnv, clientIp } from "../auth";
-import { TRADE_TYPES, findType } from "../content";
+import { TRADE_TYPES, findType, safeUrl } from "../content";
 import { allow, now } from "../db";
 import { Field, Flash, page } from "../ui";
 
@@ -128,6 +128,25 @@ market.get("/requirements/:id{[0-9]+}", async (c) => {
         </div>
       </div>
       {t && <p class="small" style="margin-top:14px"><a class="gold" href={`/category/${t.slug}`}>Browse {t.label.toLowerCase()} in the directory →</a></p>}
+    </main>
+  ));
+});
+
+// Trade shows and exhibitions, added from the admin panel.
+type Ev = { id: number; title: string; city: string | null; venue: string | null; starts_on: string; ends_on: string | null; url: string | null; details: string | null };
+const day = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+market.get("/events", async (c) => {
+  const today = new Date(Date.now() + 5.5 * 3600000).toISOString().slice(0, 10);
+  const rows = (await c.env.DB.prepare(`SELECT * FROM events WHERE coalesce(ends_on, starts_on) >= ? ORDER BY starts_on LIMIT 100`).bind(today).all<Ev>()).results;
+  return page(c, { title: "Jewellery trade shows and exhibitions in India", desc: "Upcoming jewellery trade shows, exhibitions and B2B events in India, with dates and venues.", path: "/events",
+    jsonld: rows.slice(0, 20).map((e) => ({ "@context": "https://schema.org", "@type": "Event", name: e.title, startDate: e.starts_on, endDate: e.ends_on ?? e.starts_on, location: { "@type": "Place", name: e.venue ?? e.city ?? "India", address: e.city ?? "India" } })) }, (
+    <main class="wrap narrow" style="padding-top:26px">
+      <div class="eyebrow">Events</div>
+      <h1 style="font-size:30px;margin:6px 0">Trade shows and exhibitions</h1>
+      <p class="muted small">Upcoming events for the jewellery, bullion and allied trade. Confirm dates with the organiser before you travel.</p>
+      {rows.length === 0 ? <div class="card small muted" style="margin-top:14px">Upcoming events will be listed here soon.</div> : (
+        <div class="stack" style="margin-top:14px">{rows.map((e) => <div class="card"><b>{e.title}</b><div class="small muted" style="margin-top:4px">📅 {day(e.starts_on)}{e.ends_on && e.ends_on !== e.starts_on ? ` to ${day(e.ends_on)}` : ""}{e.venue || e.city ? ` · 📍 ${[e.venue, e.city].filter(Boolean).join(", ")}` : ""}</div>{e.details && <p class="small" style="white-space:pre-line">{e.details}</p>}{safeUrl(e.url) && <a class="gold small" href={safeUrl(e.url)!} target="_blank" rel="nofollow noopener">Organiser's website →</a>}</div>)}</div>
+      )}
     </main>
   ));
 });

@@ -60,7 +60,7 @@ export function page(c: Context<AppEnv>, o: PageOpts, body: Child) {
           </header>
         )}
         {!o.bare && (
-          <nav class="subnav"><a href="/directory">Directory</a><a href="/rates">Gold rates</a><a href="/tools">Tools</a><a href="/requirements">Buy requirements</a><a href="/news">News</a><a href="/states">States</a><a href="/cities">Cities</a><a href="/categories">Categories</a><a href="/pricing">Membership</a></nav>
+          <nav class="subnav"><a href="/directory">Directory</a><a href="/rates">Gold rates</a><a href="/tools">Tools</a><a href="/requirements">Buy requirements</a><a href="/news">News</a><a href="/events">Events</a><a href="/states">States</a><a href="/cities">Cities</a><a href="/categories">Categories</a><a href="/pricing">Membership</a></nav>
         )}
         {body}
         {!o.bare && (
@@ -68,7 +68,7 @@ export function page(c: Context<AppEnv>, o: PageOpts, body: Child) {
             <div class="wrap">
               <span>© {new Date().getFullYear()} {brand}</span>
               <span class="row">
-                <a href="/directory">Directory</a><a href="/rates">Gold rates</a><a href="/tools">Tools</a><a href="/requirements">Buy requirements</a><a href="/news">News</a><a href="/states">States</a><a href="/cities">Cities</a><a href="/pricing">Membership</a>
+                <a href="/directory">Directory</a><a href="/rates">Gold rates</a><a href="/tools">Tools</a><a href="/requirements">Buy requirements</a><a href="/news">News</a><a href="/events">Events</a><a href="/states">States</a><a href="/cities">Cities</a><a href="/pricing">Membership</a>
                 <a href="/signup">List your business</a><a href="/terms">Terms</a><a href="/privacy">Privacy</a>
               </span>
             </div>
