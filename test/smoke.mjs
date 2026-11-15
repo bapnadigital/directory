@@ -131,5 +131,8 @@ r = await other(jobPath); ok("job contact shown to any signed-in member", r.text
 r = await anon("/rates/subscribe", { method: "POST", form: { email: "rates@example.test" } }); ok("rate email sign-up", r.loc.includes("ok="));
 r = await anon("/rates/subscribe", { method: "POST", form: { email: "nope" } }); ok("rate email validates address", r.loc.includes("err="));
 r = await anon("/rates/confirm?t=bad"); ok("bad confirm link rejected", r.loc.includes("err="));
+r = await anon("/guides"); ok("guides index", r.status === 200 && r.text.includes("BIS hallmark"));
+r = await anon("/guides/gst-on-gold-jewellery"); ok("guide page", r.status === 200 && r.text.includes("3% GST"));
+r = await anon("/guides/nope"); ok("unknown guide 404", r.status === 404);
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

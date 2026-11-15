@@ -78,7 +78,7 @@ export function page(c: Context<AppEnv>, o: PageOpts, body: Child) {
               <span>© {new Date().getFullYear()} {brand}</span>
               <span class="row">
                 <a href="/directory">Directory</a><a href="/rates">Gold rates</a><a href="/tools">Tools</a><a href="/requirements">Trade board</a><a href="/news">News</a><a href="/events">Events</a><a href="/states">States</a><a href="/cities">Cities</a><a href="/pricing">Membership</a>
-                <a href="/signup">List your business</a><a href="/advertise">Advertise</a><a href="/about">About</a><a href="/terms">Terms</a><a href="/privacy">Privacy</a>
+                <a href="/guides">Guides</a><a href="/signup">List your business</a><a href="/advertise">Advertise</a><a href="/about">About</a><a href="/terms">Terms</a><a href="/privacy">Privacy</a>
               </span>
             </div>
           </footer>
