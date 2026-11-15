@@ -152,5 +152,7 @@ r = await anon("/city/mumbai"); ok("city page has breadcrumbs", r.text.includes(
 r = await adminC("/admin"); ok("admin shows claim invitations, nothing queued", r.text.includes("Claim invitations") && r.text.includes("<b>0</b> waiting to go"));
 r = await other("/admin/invites", { method: "POST", form: { n: "50" } }); r = await adminC("/admin"); ok("non-admin cannot queue invitations", r.text.includes("<b>0</b> waiting to go"));
 r = await anon("/optout?e=a@b.co&t=bad"); ok("bad opt-out link rejected", r.text.includes("not valid"));
+r = await anon("/hi"); ok("Hindi page", r.status === 200 && r.text.includes("डायरेक्टरी"));
+r = await anon("/gu"); ok("Gujarati page", r.status === 200 && r.text.includes("ડિરેક્ટરી"));
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
