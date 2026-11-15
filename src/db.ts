@@ -6,6 +6,7 @@ export type Env = {
   ASSETS: Fetcher;
   BRAND_NAME: string;
   SITE_URL: string;
+  RATES_URL?: string;
   IMPORT_URL?: string;
   IMPORT_KEY?: string;
   EMAIL?: { send(m: { to: string; from: string; subject: string; text: string; html?: string }): Promise<unknown> };
@@ -14,7 +15,7 @@ export type Env = {
   CASHFREE_ENV?: string;
 };
 
-const SCHEMA_VERSION = "3";
+const SCHEMA_VERSION = "5";
 
 const SCHEMA: string[] = [
   `CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
@@ -92,7 +93,10 @@ const SCHEMA: string[] = [
      position INTEGER NOT NULL DEFAULT 0, active INTEGER NOT NULL DEFAULT 1, starts_at INTEGER, ends_at INTEGER,
      views INTEGER NOT NULL DEFAULT 0, clicks INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS banners_place_idx ON banners (placement, active)`,
+  `CREATE TABLE IF NOT EXISTS rate_history (ts INTEGER PRIMARY KEY, gold995gst REAL, silver_gst REAL, gold_usd REAL, usd_inr REAL)`,
 ];
+
+const ALTERS = [`ALTER TABLE businesses ADD COLUMN state TEXT`];
 
 let ready: Promise<void> | null = null;
 
@@ -106,6 +110,8 @@ export function ensureSchema(env: Env): Promise<void> {
         // meta table missing: first run
       }
       await env.DB.batch(SCHEMA.map((s) => env.DB.prepare(s)));
+      for (const alter of ALTERS) { try { await env.DB.prepare(alter).run(); } catch { /* column already there */ } }
+      await env.DB.prepare(`CREATE INDEX IF NOT EXISTS businesses_state_idx ON businesses (state)`).run();
       await env.DB.prepare(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', ?)`).bind(SCHEMA_VERSION).run();
     })().catch((e) => {
       ready = null;
@@ -147,7 +153,7 @@ export type Business = {
   about: string | null; phone: string | null; whatsapp: string | null; email: string | null; website: string | null;
   address: string | null; hours: string | null; instagram: string | null; facebook: string | null; youtube: string | null;
   logo_image: number | null; cover_image: number | null; owner_id: number | null;
-  plan: string; plan_expires: number | null; theme: string; gst_status: string | null; gst_since: string | null;
+  plan: string; plan_expires: number | null; theme: string; gst_status: string | null; gst_since: string | null; state?: string | null;
   views: number; source: string; created_at: number;
 };
 

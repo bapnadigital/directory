@@ -1,3 +1,4 @@
+import { stateFromGst } from "./content";
 import { type Env, getMeta, now, setMeta, slugify } from "./db";
 
 // One-time import of public directory data (name, GSTIN, city, registration
@@ -31,8 +32,8 @@ export async function importBatch(env: Env, pages = 4): Promise<{ done: boolean;
       const name = (r.display_name || r.name).trim().slice(0, 120);
       const slug = (r.slug || `${slugify(name)}-${r.gst.slice(-4).toLowerCase()}`).toLowerCase();
       const city = r.city ? titleCase(r.city.trim()).slice(0, 60) : null;
-      return env.DB.prepare(`INSERT OR IGNORE INTO businesses (slug, name, gst, city, city_slug, gst_status, gst_since, source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'import', ?)`)
-        .bind(slug, name, r.gst.toUpperCase(), city, citySlug(city), r.gst_registration_status ?? null, r.gst_registration_date ?? null, t - offset);
+      return env.DB.prepare(`INSERT OR IGNORE INTO businesses (slug, name, gst, city, city_slug, gst_status, gst_since, state, source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'import', ?)`)
+        .bind(slug, name, r.gst.toUpperCase(), city, citySlug(city), r.gst_registration_status ?? null, r.gst_registration_date ?? null, stateFromGst(r.gst), t - offset);
     });
     if (stmts.length) await env.DB.batch(stmts);
     offset += rows.length;

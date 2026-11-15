@@ -49,6 +49,8 @@ export function page(c: Context<AppEnv>, o: PageOpts, body: Child) {
               <a href="/" class="logo"><i>◆</i> {brand}</a>
               <nav class="main">
                 <a href="/directory">Directory</a>
+                <a href="/rates">Rates</a>
+                <a href="/tools" class="hide-sm">Tools</a>
                 <a href="/cities" class="hide-sm">Cities</a>
                 <a href="/pricing" class="hide-sm">Membership</a>
                 {user ? <a href="/dashboard" class="btn sm">Dashboard</a> : <a href="/login" class="btn sm">Sign in</a>}
@@ -62,13 +64,14 @@ export function page(c: Context<AppEnv>, o: PageOpts, body: Child) {
             <div class="wrap">
               <span>© {new Date().getFullYear()} {brand}</span>
               <span class="row">
-                <a href="/directory">Directory</a><a href="/cities">Cities</a><a href="/pricing">Membership</a>
+                <a href="/directory">Directory</a><a href="/rates">Gold rates</a><a href="/tools">Tools</a><a href="/cities">Cities</a><a href="/pricing">Membership</a>
                 <a href="/signup">List your business</a><a href="/terms">Terms</a><a href="/privacy">Privacy</a>
               </span>
             </div>
           </footer>
         )}
         <script src="/app.js" defer></script>
+        <script src="/tools.js" defer></script>
       </body>
     </html>,
   );

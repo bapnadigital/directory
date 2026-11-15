@@ -3,7 +3,7 @@ import { Hono, type Context } from "hono";
 import type { Child } from "hono/jsx";
 import { type AppEnv, clientIp, endSession, hashPassword, requireUser, startSession, verifyPassword } from "../auth";
 import { type Business, type PlanKey, PLANS, allow, isPremium, limits, now, slugify } from "../db";
-import { CITIES, THEMES, TRADE_TYPES, safeUrl } from "../content";
+import { CITIES, THEMES, TRADE_TYPES, safeUrl, stateFromGst } from "../content";
 import { Field, Flash, page, siteUrl } from "../ui";
 
 export const account = new Hono<AppEnv>();
@@ -320,8 +320,8 @@ account.post("/dashboard/new", async (c) => {
   if (!(await allow(c.env, `newbiz:${u.id}`, 2, 86400))) return go(c, "/dashboard/new", "Too many attempts today", true);
   let slug = slugify(`${name} ${city}`);
   if (await c.env.DB.prepare(`SELECT 1 FROM businesses WHERE slug = ?`).bind(slug).first()) slug = `${slug}-${Math.random().toString(36).slice(2, 6)}`;
-  await c.env.DB.prepare(`INSERT INTO businesses (slug, name, gst, city, city_slug, owner_id, source, created_at) VALUES (?, ?, ?, ?, ?, ?, 'user', ?)`)
-    .bind(slug, name, gst, city, slugify(city), u.id, now()).run();
+  await c.env.DB.prepare(`INSERT INTO businesses (slug, name, gst, city, city_slug, owner_id, state, source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'user', ?)`)
+    .bind(slug, name, gst, city, slugify(city), u.id, stateFromGst(gst), now()).run();
   return go(c, "/dashboard/profile", "Listing created. Add your details below.");
 });
 

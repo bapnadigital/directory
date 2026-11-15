@@ -12,6 +12,9 @@ export const TRADE_TYPES = [
   { slug: "refiner", label: "Refiners", keyword: "refin", icon: "🔥" },
   { slug: "cad_casting", label: "CAD & casting", keyword: "casting", icon: "🖥️" },
   { slug: "tools", label: "Tools & machinery", keyword: "tools", icon: "🛠️" },
+  { slug: "pearls", label: "Pearls", keyword: "pearl", icon: "🦪" },
+  { slug: "packaging", label: "Packaging & display", keyword: "packag", icon: "🎁" },
+  { slug: "allied", label: "Allied services", keyword: "\u0000allied", icon: "🤝" },
 ] as const;
 export const findType = (slug?: string | null) => TRADE_TYPES.find((t) => t.slug === slug);
 
@@ -66,3 +69,14 @@ export function safeUrl(raw?: string | null): string | null {
 }
 export const initials = (name: string) =>
   name.split(/\s+/).filter((w) => /[A-Za-z0-9]/.test(w[0] ?? "")).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("") || "J";
+
+// States and union territories with their GSTIN prefix.
+export const STATES = [
+  ["27", "Maharashtra"], ["24", "Gujarat"], ["07", "Delhi"], ["29", "Karnataka"], ["19", "West Bengal"], ["32", "Kerala"], ["08", "Rajasthan"],
+  ["37", "Andhra Pradesh"], ["33", "Tamil Nadu"], ["36", "Telangana"], ["03", "Punjab"], ["10", "Bihar"], ["09", "Uttar Pradesh"], ["06", "Haryana"],
+  ["22", "Chhattisgarh"], ["23", "Madhya Pradesh"], ["18", "Assam"], ["05", "Uttarakhand"], ["30", "Goa"], ["02", "Himachal Pradesh"], ["20", "Jharkhand"],
+  ["21", "Odisha"], ["01", "Jammu and Kashmir"], ["04", "Chandigarh"], ["34", "Puducherry"], ["16", "Tripura"], ["17", "Meghalaya"], ["14", "Manipur"],
+  ["13", "Nagaland"], ["11", "Sikkim"], ["12", "Arunachal Pradesh"], ["15", "Mizoram"], ["26", "Dadra and Nagar Haveli and Daman and Diu"], ["38", "Ladakh"], ["35", "Andaman and Nicobar Islands"],
+].map(([code, label]) => ({ code, label, slug: label.toLowerCase().replace(/[^a-z]+/g, "-") }));
+export const findState = (slug?: string | null) => STATES.find((s) => s.slug === slug);
+export const stateFromGst = (gst?: string | null) => STATES.find((s) => s.code === (gst ?? "").slice(0, 2))?.label ?? null;

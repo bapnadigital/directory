@@ -4,8 +4,10 @@ import QRCode from "qrcode-svg";
 import { type AppEnv, clientIp } from "../auth";
 import { type Business, allow, isPremium, now, PLANS, PLAN_LIMITS } from "../db";
 import { Ad, Sponsors } from "./ads";
+import { RateStrip } from "./rates";
+import { TOOLS } from "./tools";
 import { DAILY_REVEALS, hasReveal, isPaidMember, revealsToday } from "./contact";
-import { CITIES, THEMES, TRADE_TYPES, findCity, findType, initials, safeUrl, waNumber } from "../content";
+import { CITIES, STATES, THEMES, TRADE_TYPES, findCity, findState, findType, initials, safeUrl, waNumber } from "../content";
 import { BizCard, type Card, Field, Flash, page, siteUrl } from "../ui";
 
 export const pub = new Hono<AppEnv>();
@@ -16,7 +18,7 @@ const ORDER = `ORDER BY (b.plan = 'premium' AND (b.plan_expires IS NULL OR b.pla
   (b.owner_id IS NOT NULL) DESC, b.created_at DESC, b.id DESC`;
 const PAGE_SIZE = 24;
 
-type Filters = { q?: string; city?: string; type?: string; claimed?: boolean };
+type Filters = { q?: string; city?: string; type?: string; claimed?: boolean; state?: string };
 
 function where(f: Filters): { sql: string; args: unknown[] } {
   const parts: string[] = [];
@@ -27,6 +29,7 @@ function where(f: Filters): { sql: string; args: unknown[] } {
     args.push(`%${q}%`, `%${q.toUpperCase()}%`, `%${q}%`);
   }
   if (f.city) { parts.push(`b.city_slug = ?`); args.push(f.city); }
+  if (f.state) { parts.push(`b.state = ?`); args.push(f.state); }
   const t = findType(f.type);
   if (t) {
     parts.push(`(EXISTS (SELECT 1 FROM business_types t WHERE t.business_id = b.id AND t.type = ?) OR b.name LIKE ?)`);
@@ -75,12 +78,12 @@ pub.get("/", async (c) => {
         </form>
       </section>
 
-      <div class="wrap"><Ad c={c} place="home" /></div>
+      <div class="wrap"><RateStrip c={c} /><Ad c={c} place="home" /></div>
 
       <section class="wrap">
         <div class="center"><div class="eyebrow">Browse by category</div><h2 style="font-size:26px;margin:6px 0 18px">What are you looking for?</h2></div>
         <div class="grid g5">
-          {TRADE_TYPES.slice(0, 10).map((t) => (
+          {TRADE_TYPES.slice(0, 15).map((t) => (
             <a class="card tile" href={`/category/${t.slug}`}><div class="ic">{t.icon}</div><b class="small">{t.label}</b></a>
           ))}
         </div>
@@ -104,12 +107,17 @@ pub.get("/", async (c) => {
       )}
 
       <section class="wrap">
-        <div class="head"><div><div class="eyebrow">Popular hubs</div><h2>Explore by city</h2></div><a class="gold small" href="/cities">All {CITIES.length} cities →</a></div>
+        <div class="head"><div><div class="eyebrow">Popular hubs</div><h2>Explore by city</h2></div><span class="row"><a class="gold small" href="/states">By state →</a><a class="gold small" href="/cities">All cities →</a></span></div>
         <div class="grid g4">
           {CITIES.slice(0, 8).map((ct) => (
             <a class="card" href={`/city/${ct.slug}`}>📍<h3 style="margin-top:18px;font-size:18px">{ct.label}</h3><div class="tiny muted">{ct.note}</div></a>
           ))}
         </div>
+      </section>
+
+      <section class="wrap">
+        <div class="head"><div><div class="eyebrow">Free tools</div><h2>Calculators with live rates</h2></div><a class="gold small" href="/tools">All tools →</a></div>
+        <div class="grid g4">{TOOLS.slice(0, 4).map((t) => <a class="card" href={`/tools/${t.slug}`}><b>{t.icon} {t.name}</b><p class="small muted" style="margin-bottom:0">{t.short}</p></a>)}</div>
       </section>
 
       <section class="wrap">
@@ -142,6 +150,7 @@ function listing(title: string, sub: string, basePath: string, f: Filters, pageN
     if (f.q) u.set("q", f.q);
     if (showFilters && f.city) u.set("city", f.city);
     if (showFilters && f.type) u.set("type", f.type);
+    if (showFilters && f.state) u.set("state", STATES.find((s) => s.label === f.state)?.slug ?? "");
     if (f.claimed) u.set("claimed", "1");
     if (p > 1) u.set("page", String(p));
     const s = u.toString();
@@ -160,6 +169,9 @@ function listing(title: string, sub: string, basePath: string, f: Filters, pageN
               <>
                 <label>City
                   <select name="city"><option value="">All cities</option>{CITIES.map((ct) => <option value={ct.slug} selected={f.city === ct.slug}>{ct.label}</option>)}</select>
+                </label>
+                <label>State
+                  <select name="state"><option value="">All states</option>{STATES.slice(0, 22).map((st) => <option value={st.slug} selected={f.state === st.label}>{st.label}</option>)}</select>
                 </label>
                 <label>Business type
                   <select name="type"><option value="">All types</option>{TRADE_TYPES.map((t) => <option value={t.slug} selected={f.type === t.slug}>{t.label}</option>)}</select>
@@ -192,17 +204,22 @@ function listing(title: string, sub: string, basePath: string, f: Filters, pageN
 const pageNum = (v?: string) => Math.min(2000, Math.max(1, parseInt(v ?? "1", 10) || 1));
 
 pub.get("/directory", async (c) => {
-  const f: Filters = { q: c.req.query("q"), city: findCity(c.req.query("city"))?.slug, type: findType(c.req.query("type"))?.slug, claimed: c.req.query("claimed") === "1" };
+  const f: Filters = { q: c.req.query("q"), city: findCity(c.req.query("city"))?.slug, type: findType(c.req.query("type"))?.slug, claimed: c.req.query("claimed") === "1", state: findState(c.req.query("state"))?.label };
   const p = pageNum(c.req.query("page"));
   const data = await search(c.env.DB, f, p);
-  const filtered = !!(f.q || f.city || f.type || f.claimed || p > 1);
+  const filtered = !!(f.q || f.city || f.type || f.claimed || f.state || p > 1);
   return page(c, { title: "Jewellery business directory", desc: "Search jewellery manufacturers, wholesalers, retailers and bullion dealers across India.", path: "/directory", noindex: filtered },
     listing("Jewellery directory", "Free to search, no sign-in needed.", "/directory", f, p, data, true, c));
 });
 
 pub.get("/city/:slug", async (c) => {
-  const city = findCity(c.req.param("slug"));
-  if (!city) return c.notFound();
+  let city = findCity(c.req.param("slug"));
+  if (!city) {
+    const slug = c.req.param("slug").toLowerCase();
+    const row = /^[a-z0-9-]{2,60}$/.test(slug) ? await c.env.DB.prepare(`SELECT city, state, count(*) AS n FROM businesses WHERE city_slug = ?`).bind(slug).first<{ city: string | null; state: string | null; n: number }>() : null;
+    if (!row || !row.city || row.n < 1) return c.notFound();
+    city = { slug, label: row.city, note: row.state ?? "India" };
+  }
   const f: Filters = { q: c.req.query("q"), city: city.slug, claimed: c.req.query("claimed") === "1" };
   const p = pageNum(c.req.query("page"));
   const data = await search(c.env.DB, f, p);
@@ -225,14 +242,60 @@ pub.get("/category/:slug", async (c) => {
     listing(t.label, "Businesses tagged by their owners appear first.", `/category/${t.slug}`, f, p, data, false, c));
 });
 
-pub.get("/cities", (c) => page(c, { title: "Jewellery hubs of India", desc: "Browse jewellery businesses by city.", path: "/cities" }, (
+let geoCache: { at: number; states: { state: string; n: number }[]; cities: { city: string; city_slug: string; n: number }[] } | null = null;
+async function geo(db: D1Database) {
+  if (geoCache && Date.now() - geoCache.at < 600000) return geoCache;
+  const [st, ci] = await Promise.all([
+    db.prepare(`SELECT state, count(*) AS n FROM businesses WHERE state IS NOT NULL GROUP BY state ORDER BY n DESC`).all<{ state: string; n: number }>(),
+    db.prepare(`SELECT min(city) AS city, city_slug, count(*) AS n FROM businesses WHERE city_slug IS NOT NULL AND city_slug <> '' GROUP BY city_slug HAVING n >= 15 ORDER BY n DESC LIMIT 240`).all<{ city: string; city_slug: string; n: number }>(),
+  ]);
+  geoCache = { at: Date.now(), states: st.results, cities: ci.results };
+  return geoCache;
+}
+
+pub.get("/states", async (c) => {
+  const g = await geo(c.env.DB);
+  return page(c, { title: "Jewellers by state — India jewellery trade directory", desc: "Browse jewellery manufacturers, wholesalers, retailers and bullion dealers in every Indian state.", path: "/states" }, (
+    <main class="wrap" style="padding-top:26px">
+      <h1 style="font-size:30px">Jewellers by state</h1>
+      <div class="grid g4" style="margin-top:18px">
+        {g.states.map((s) => { const st = STATES.find((x) => x.label === s.state); return st ? <a class="card" href={`/state/${st.slug}`}><h3 style="font-size:16px">{st.label}</h3><div class="tiny muted">{s.n.toLocaleString("en-IN")} businesses</div></a> : null; })}
+      </div>
+    </main>
+  ));
+});
+
+pub.get("/state/:slug", async (c) => {
+  const st = findState(c.req.param("slug"));
+  if (!st) return c.notFound();
+  const f: Filters = { q: c.req.query("q"), state: st.label, claimed: c.req.query("claimed") === "1" };
+  const p = pageNum(c.req.query("page"));
+  const data = await search(c.env.DB, f, p);
+  return page(c, {
+    title: `Jewellers in ${st.label} — manufacturers, wholesalers, bullion dealers, retailers`,
+    desc: `${data.total.toLocaleString("en-IN")} jewellery businesses in ${st.label}. Search by name or city, view catalogues and send enquiries.`,
+    path: `/state/${st.slug}`, noindex: p > 1 || !!f.q,
+  }, listing(`Jewellers in ${st.label}`, "All listed jewellery and allied businesses in the state.", `/state/${st.slug}`, f, p, data, false, c));
+});
+
+pub.get("/categories", (c) => page(c, { title: "Jewellery trade categories", desc: "Browse the jewellery trade by category: manufacturers, wholesalers, bullion, diamonds, hallmarking, refiners, tools, packaging and allied services.", path: "/categories" }, (
+  <main class="wrap" style="padding-top:26px">
+    <h1 style="font-size:30px">Trade categories</h1>
+    <div class="grid g5" style="margin-top:18px">{TRADE_TYPES.map((t) => <a class="card tile" href={`/category/${t.slug}`}><div class="ic">{t.icon}</div><b class="small">{t.label}</b></a>)}</div>
+  </main>
+)));
+
+pub.get("/cities", async (c) => { const g = await geo(c.env.DB); return page(c, { title: "Jewellery hubs of India", desc: "Browse jewellery businesses by city.", path: "/cities" }, (
   <main class="wrap" style="padding-top:26px">
     <h1 style="font-size:30px">Jewellery hubs</h1>
     <div class="grid g4" style="margin-top:18px">
       {CITIES.map((ct) => <a class="card" href={`/city/${ct.slug}`}><h3 style="font-size:17px">📍 {ct.label}</h3><div class="tiny muted">{ct.note}</div></a>)}
     </div>
+    <h2 style="font-size:20px;margin:26px 0 12px">More cities and towns</h2>
+    <div class="row" style="gap:8px">{g.cities.filter((x) => !findCity(x.city_slug)).map((x) => <a class="badge" href={`/city/${x.city_slug}`}>{x.city} · {x.n}</a>)}</div>
+    <p class="small" style="margin-top:18px"><a class="gold" href="/states">Browse by state →</a></p>
   </main>
-)));
+)); });
 
 // ───────────────────────── Listing page ─────────────────────────
 type Product = { id: number; name: string; category: string | null; weight: string | null; purity: string | null; price: string | null; description: string | null; image_id: number | null };
@@ -592,7 +655,7 @@ pub.get("/sitemap/:file", async (c) => {
   const file = c.req.param("file");
   const base = siteUrl(c);
   const xml = (urls: string[]) => c.body(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map((u) => `<url><loc>${base}${u}</loc></url>`).join("\n")}\n</urlset>`, 200, { "content-type": "application/xml", "cache-control": "public, max-age=3600" });
-  if (file === "pages.xml") return xml(["/", "/directory", "/cities", "/pricing", ...CITIES.map((x) => `/city/${x.slug}`), ...TRADE_TYPES.map((t) => `/category/${t.slug}`)]);
+  if (file === "pages.xml") return xml(["/", "/directory", "/cities", "/pricing", "/rates", "/tools", "/states", "/categories", ...TOOLS.map((t) => `/tools/${t.slug}`), ...STATES.slice(0, 22).map((x) => `/state/${x.slug}`), ...CITIES.map((x) => `/city/${x.slug}`), ...TRADE_TYPES.map((t) => `/category/${t.slug}`)]);
   const m = /^b-(\d{1,3})\.xml$/.exec(file);
   if (!m) return c.notFound();
   const i = parseInt(m[1]!, 10);
