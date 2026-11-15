@@ -28,6 +28,13 @@ export async function importBatch(env: Env, pages = 4): Promise<{ done: boolean;
     const rows = data.results ?? [];
     if (data.total != null) await setMeta(env, "import_total", String(data.total));
     const t = now();
+    const skipped = rows.filter((r) => !(r.gst && r.name));
+    if (skipped.length) {
+      const prev = JSON.parse((await getMeta(env, "import_skipped")) ?? '{"n":0,"sample":[]}') as { n: number; sample: unknown[] };
+      await setMeta(env, "import_skipped", JSON.stringify({ n: prev.n + skipped.length, sample: [...prev.sample, ...skipped.slice(0, 2).map((r) => ({ name: r.name, city: r.city, slug: r.slug, gst: r.gst ?? null }))].slice(0, 6) }));
+    }
+    const seen = new Set(rows.map((r) => (r.gst ?? "").toUpperCase()).filter(Boolean)).size;
+    await setMeta(env, "import_distinct_note", `last page: ${rows.length} rows, ${seen} distinct GSTINs, first ${rows[0]?.gst ?? "-"}`);
     const stmts = rows.filter((r) => r.gst && r.name).flatMap((r) => {
       const name = (r.display_name || r.name).trim().slice(0, 120);
       const gst = r.gst.toUpperCase();
