@@ -10,6 +10,7 @@ export const PLACEMENTS = {
   home: "Home page (below search)",
   directory: "Directory, city and category pages (above results)",
   listing: "Business pages (side column)",
+  showcase: "Home page showcase grid (large banners, two per row)",
   sponsor: "Sponsor strip on the home page (logo)",
 } as const;
 export type Placement = keyof typeof PLACEMENTS;
@@ -18,7 +19,7 @@ type Banner = { id: number; title: string; image_id: number | null; url: string 
 // House placements for the Kalptaru group. Shown, labelled "Partner", when no paid banner is
 // running in a slot, and occasionally alongside paid banners.
 const UTM = "utm_source=jewellerysahihai&utm_medium=partner";
-const HOUSE: Record<Exclude<Placement, "sponsor">, { line: string; cta: string; url: string }[]> = {
+const HOUSE: Record<Exclude<Placement, "sponsor" | "showcase">, { line: string; cta: string; url: string }[]> = {
   home: [
     { line: "Buying gold or silver bars today? See the live desk rates.", cta: "Shree Kalptaru Bullion", url: `https://shreekalptarubullion.com/?${UTM}&utm_campaign=home` },
     { line: "Where are gold and silver headed? Read today's outlook.", cta: "Shree Kalptaru outlook", url: `https://shreekalptaru.com/?${UTM}&utm_campaign=home` },
@@ -31,7 +32,7 @@ const HOUSE: Record<Exclude<Placement, "sponsor">, { line: string; cta: string; 
     { line: "Need bullion for your next order?", cta: "Live rates · Shree Kalptaru Bullion", url: `https://shreekalptarubullion.com/?${UTM}&utm_campaign=listing` },
   ],
 };
-function House({ place }: { place: Exclude<Placement, "sponsor"> }) {
+function House({ place }: { place: Exclude<Placement, "sponsor" | "showcase"> }) {
   const list = HOUSE[place], h = list[Math.floor(Math.random() * list.length)];
   return <a class="ad house" href={h.url} rel="noopener" target="_blank"><span class="ad-tag">Partner</span><span class="small muted">{h.line}</span> <b class="gold small">{h.cta} →</b></a>;
 }
@@ -39,7 +40,7 @@ function House({ place }: { place: Exclude<Placement, "sponsor"> }) {
 const live = `active = 1 AND (starts_at IS NULL OR starts_at <= ?2) AND (ends_at IS NULL OR ends_at > ?2)`;
 
 /** One banner for a placement, rotated at random. Renders nothing when there is none. */
-export async function Ad({ c, place }: { c: Context<AppEnv>; place: Exclude<Placement, "sponsor"> }) {
+export async function Ad({ c, place }: { c: Context<AppEnv>; place: Exclude<Placement, "sponsor" | "showcase"> }) {
   let b: Banner | null = null;
   try { b = await c.env.DB.prepare(`SELECT id, title, image_id, url FROM banners WHERE placement = ?1 AND ${live} ORDER BY random() LIMIT 1`).bind(place, now()).first<Banner>(); } catch { /* table not ready */ }
   if (!b || Math.random() < 0.2) return <House place={place} />;
@@ -49,6 +50,19 @@ export async function Ad({ c, place }: { c: Context<AppEnv>; place: Exclude<Plac
       <span class="ad-tag">Sponsored</span>
       {b.image_id ? <img src={`/img/${b.image_id}`} alt={b.title} loading="lazy" /> : <span class="ad-text">{b.title}</span>}
     </a>
+  );
+}
+
+/** Large banner grid on the home page, two per row. */
+export async function Showcase({ c }: { c: Context<AppEnv> }) {
+  let rows: Banner[] = [];
+  try { rows = (await c.env.DB.prepare(`SELECT id, title, image_id, url FROM banners WHERE placement = ?1 AND image_id IS NOT NULL AND ${live} ORDER BY position, id LIMIT 8`).bind("showcase", now()).all<Banner>()).results; } catch { /* not ready */ }
+  if (!rows.length) return <></>;
+  return (
+    <section class="wrap">
+      <div class="center"><div class="eyebrow">Sponsored</div><h2 style="font-size:26px;margin:6px 0 16px">Featured sellers</h2></div>
+      <div class="showcase">{rows.map((b) => <a href={`/go/a/${b.id}`} rel="sponsored nofollow noopener" target="_blank" title={b.title}><img src={`/img/${b.image_id}`} alt={b.title} loading="lazy" /></a>)}</div>
+    </section>
   );
 }
 

@@ -2,6 +2,7 @@
 import { Hono, type Context } from "hono";
 import { type AppEnv, requireAdmin } from "../auth";
 import { PLACEMENTS, type Placement } from "./ads";
+import { DAILY_REVEALS, today } from "./contact";
 import { safeUrl } from "../content";
 import { JT_CHUNKS } from "../data/jt-index";
 import { type PlanKey, PLANS, getMeta, now, setMeta } from "../db";
@@ -32,6 +33,7 @@ admin.get("/", async (c) => {
   const docs = new Set((await db.prepare(`SELECT claim_id FROM claim_docs`).all<{ claim_id: number }>()).results.map((r) => r.claim_id));
   const reports = (await db.prepare(`SELECT r.id, r.name, r.phone, r.message, r.created_at, b.name AS bname, b.slug FROM reports r JOIN businesses b ON b.id = r.business_id WHERE r.status = 'new' ORDER BY r.created_at DESC LIMIT 50`).all<{ id: number; name: string; phone: string; message: string | null; created_at: number; bname: string; slug: string }>()).results;
   const events = (await db.prepare(`SELECT id, title, city, starts_on FROM events ORDER BY starts_on DESC LIMIT 60`).all<{ id: number; title: string; city: string | null; starts_on: string }>()).results;
+  const viewers = (await db.prepare(`SELECT u.name, u.email, count(*) AS n, (SELECT count(*) FROM reveals r2 WHERE r2.user_id = u.id) AS total FROM reveals r JOIN users u ON u.id = r.user_id WHERE r.day = ? GROUP BY u.id ORDER BY n DESC LIMIT 10`).bind(today()).all<{ name: string; email: string; n: number; total: number }>()).results;
   const reqs = (await db.prepare(`SELECT id, title, city, name, phone, status, views, created_at FROM requests ORDER BY created_at DESC LIMIT 30`).all<{ id: number; title: string; city: string | null; name: string; phone: string; status: string; views: number; created_at: number }>()).results;
   const banners = (await db.prepare(`SELECT id, title, url, image_id, placement, active, ends_at, views, clicks FROM banners ORDER BY placement, position, id DESC LIMIT 100`).all<{ id: number; title: string; url: string; image_id: number | null; placement: string; active: number; ends_at: number | null; views: number; clicks: number }>()).results;
   return page(c, { title: "Admin", noindex: true }, (
@@ -72,7 +74,7 @@ admin.get("/", async (c) => {
         <div class="card">
           <b>Business import</b>
           <p class="small muted">Trade directory listings: {jtDone} of {jtChunks} batches loaded.</p>
-          <p class="small muted">{done === "1" ? `Finished: ${Number(off ?? 0).toLocaleString("en-IN")} businesses read from the old site.` : `In progress: ${Number(off ?? 0).toLocaleString("en-IN")} of ${total ? Number(total).toLocaleString("en-IN") : "?"} read. It continues by itself every 2 minutes.`} {note && note !== "finished" ? `(${note})` : ""}</p>
+          <p class="small muted">{done === "1" ? `Finished: ${Number(off ?? 0).toLocaleString("en-IN")} businesses read from the old site.` : `In progress: ${Number(off ?? 0).toLocaleString("en-IN")} of ${total ? Number(total).toLocaleString("en-IN") : "?"} read. It continues by itself every minute.`} {note && note !== "finished" ? `(${note})` : ""}</p>
           <div class="row"><form method="post" action="/admin/import/run"><button class="btn ghost sm" type="submit">Run a batch now</button></form>
             <form method="post" action="/admin/import/restart" data-confirm="Re-read all businesses from the old site? Existing listings are kept."><button class="btn ghost sm" type="submit">Re-run from start</button></form></div>
         </div>
@@ -82,6 +84,11 @@ admin.get("/", async (c) => {
         {reports.length === 0 ? <div class="card small muted">No open reports.</div> : <div class="card"><table><tr><th>Listing</th><th>From</th><th>Message</th><th></th></tr>
           {reports.map((r) => <tr><td><a class="gold" href={`/b/${r.slug}`} target="_blank">{r.bname}</a></td><td>{r.name}<div class="tiny muted">{r.phone} · {when(r.created_at)}</div></td><td class="small" style="white-space:normal">{r.message}</td>
             <td><div class="row"><form method="post" action={`/admin/reports/${r.id}/close`}><button class="btn ghost sm" type="submit">Close</button></form><form method="post" action={`/admin/reports/${r.id}/release`} data-confirm="Remove the current owner from this listing so it can be claimed again?"><button class="btn danger sm" type="submit">Remove owner</button></form></div></td></tr>)}</table></div>}
+      </section>
+      <section>
+        <h2 style="font-size:20px;margin-bottom:10px">Contact views today</h2>
+        {viewers.length === 0 ? <div class="card small muted">No member has opened a contact today. Each member can open up to {DAILY_REVEALS} a day; fast repeated opening pauses the account automatically.</div> : <div class="card"><table><tr><th>Member</th><th>Opened today</th><th>All time</th></tr>
+          {viewers.map((v) => <tr><td>{v.name}<div class="tiny muted">{v.email}</div></td><td>{v.n} of {DAILY_REVEALS}</td><td>{v.total}</td></tr>)}</table></div>}
       </section>
       <section>
         <h2 style="font-size:20px;margin-bottom:10px">Buy requirements ({reqs.length} recent)</h2>
@@ -115,7 +122,7 @@ admin.get("/", async (c) => {
             <label>Banner image (JPG, PNG or WebP under 600 KB)<input type="file" name="image" accept="image/jpeg,image/png,image/webp" data-resize="1600" /></label>
             <label>Run for how many days? (leave empty for no end date)<input name="days" type="number" min="1" max="730" /></label>
             <button class="btn sm" type="submit">Add banner</button>
-            <p class="tiny muted">Best sizes: wide banners 1200 × 250, side column 600 × 500, sponsor logos 300 × 150. Without an image the name is shown as text.</p>
+            <p class="tiny muted">Best sizes: wide banners 1200 × 250, showcase 1200 × 550, side column 600 × 500, sponsor logos 300 × 150. Without an image the name is shown as text.</p>
           </form>
           <div class="card">
             <b>Current banners ({banners.length})</b>

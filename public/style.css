@@ -93,3 +93,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--gold-bg);box-shadow:0
 .side a.on,.side a:hover{background:var(--surface2);color:var(--navy)}.stat b{color:var(--navy)}
 @media(max-width:560px){.g4:has(a.card.biz){grid-template-columns:minmax(0,1fr)}}
 @media(max-width:560px){.hero{padding-left:14px;padding-right:14px}.hero p.muted{font-size:14px}}
+.chip{display:inline-block;padding:8px 14px;border:1px solid var(--border);border-radius:999px;background:var(--surface);font-size:13px;font-weight:500}.chip:hover{border-color:var(--gold-bg);color:var(--gold)}
+.showcase{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.showcase a{display:block;border-radius:12px;overflow:hidden;border:1px solid var(--border);background:var(--surface2)}.showcase img{width:100%;aspect-ratio:24/11;object-fit:cover}
+@media(max-width:700px){.showcase{grid-template-columns:minmax(0,1fr)}}
+section+section{padding-top:22px}.biz .top img{object-fit:contain}

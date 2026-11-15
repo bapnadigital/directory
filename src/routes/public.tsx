@@ -3,7 +3,7 @@ import { Hono, type Context } from "hono";
 import QRCode from "qrcode-svg";
 import { type AppEnv, clientIp } from "../auth";
 import { type Business, allow, isPremium, now, PLANS, PLAN_LIMITS } from "../db";
-import { Ad, Sponsors } from "./ads";
+import { Ad, Showcase, Sponsors } from "./ads";
 import { RateStrip } from "./rates";
 import { sendMail } from "../mail";
 import { LatestNews, LatestRequests } from "./market";
@@ -52,13 +52,19 @@ async function search(db: D1Database, f: Filters, pageNo: number) {
 }
 
 // ───────────────────────── Home ─────────────────────────
+let homeCache: { at: number; featured: D1Result<Card>; latest: D1Result<Card>; total: { n: number } | null } | null = null;
+const SPECIALITIES = [["Gold", "gold"], ["Diamond", "diam"], ["Silver", "silver"], ["Antique & Kundan", "kundan"], ["Chains", "chain"], ["Bangles", "bangle"], ["Mangalsutra", "mangalsutra"], ["Temple jewellery", "temple"], ["Polki", "polki"], ["Platinum", "platinum"], ["Gemstones", "gems"], ["Pearls", "pearl"], ["Casting", "casting"], ["Imitation", "imitation"], ["Bullion", "bullion"], ["Ornaments", "ornament"]];
 pub.get("/", async (c) => {
   const db = c.env.DB;
-  const [featured, latest, total] = await Promise.all([
-    db.prepare(`SELECT ${CARD_COLS} FROM businesses b WHERE b.plan = 'premium' AND (b.plan_expires IS NULL OR b.plan_expires > ?) ORDER BY random() LIMIT 4`).bind(now()).all<Card>(),
-    db.prepare(`SELECT ${CARD_COLS} FROM businesses b ${ORDER} LIMIT 8`).all<Card>(),
-    db.prepare(`SELECT count(*) AS n FROM businesses`).first<{ n: number }>(),
-  ]);
+  if (!homeCache || Date.now() - homeCache.at > 60000) {
+    const [f, l, t] = await Promise.all([
+      db.prepare(`SELECT ${CARD_COLS} FROM businesses b WHERE b.plan = 'premium' AND (b.plan_expires IS NULL OR b.plan_expires > ?) ORDER BY random() LIMIT 4`).bind(now()).all<Card>(),
+      db.prepare(`SELECT ${CARD_COLS} FROM businesses b ${ORDER} LIMIT 8`).all<Card>(),
+      db.prepare(`SELECT count(*) AS n FROM businesses`).first<{ n: number }>(),
+    ]);
+    homeCache = { at: Date.now(), featured: f, latest: l, total: t };
+  }
+  const { featured, latest, total } = homeCache;
   const n = total?.n ?? 0;
   const brand = c.env.BRAND_NAME;
   return page(c, {
@@ -116,6 +122,13 @@ pub.get("/", async (c) => {
           ))}
         </div>
       </section>
+
+      <section class="wrap">
+        <div class="center"><div class="eyebrow">Search by speciality</div></div>
+        <div class="row" style="gap:8px;justify-content:center;margin-top:12px">{SPECIALITIES.map(([l, q]) => <a class="chip" href={`/directory?q=${q}`}>{l}</a>)}</div>
+      </section>
+
+      <Showcase c={c} />
 
       <LatestRequests c={c} />
 
