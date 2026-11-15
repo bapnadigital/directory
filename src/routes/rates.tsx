@@ -3,7 +3,10 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import type { AppEnv } from "../auth";
 import { RATE_SOURCE, getRates, inr, keyRates, perGram } from "../rates";
-import { page, siteUrl } from "../ui";
+import { Flash, page, siteUrl } from "../ui";
+import { allow } from "../db";
+import { clientIp } from "../auth";
+import { subscribe } from "../ratemail";
 
 export const ratesApp = new Hono<AppEnv>();
 const when = (t: number) => new Date(t * 1000).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
@@ -111,6 +114,17 @@ ratesApp.get("/rates", async (c) => {
         </div>
       )}
 
+      <div class="card" id="email" style="margin-top:20px">
+        <h2 style="font-size:18px">Get the rate by email every morning</h2>
+        <p class="small muted">One short email at 11 am on trading days with gold and silver rates. Free. Stop any time with one click.</p>
+        <Flash ok={c.req.query("ok")} err={c.req.query("err")} />
+        <form method="post" action="/rates/subscribe" class="row">
+          <input type="email" name="email" required maxlength={120} placeholder="you@example.com" style="flex:1;min-width:200px" />
+          <input name="website" tabindex={-1} autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true" />
+          <button class="btn" type="submit">Send me the rates</button>
+        </form>
+      </div>
+
       <div class="band" style="margin-top:20px;padding:26px">
         <div class="eyebrow">Rate partner</div>
         <h2 style="font-size:22px;margin-top:6px">Book bullion at these rates with {RATE_SOURCE.name}</h2>
@@ -143,6 +157,26 @@ ratesApp.get("/rates", async (c) => {
 });
 
 // Embeddable rate card for jewellers' own websites.
+ratesApp.post("/rates/subscribe", async (c) => {
+  const f = await c.req.parseBody();
+  const done = "Check your inbox and tap the link to confirm.";
+  const to = (k: string, m: string) => c.redirect(`/rates?${k}=${encodeURIComponent(m)}#email`, 303);
+  if (String(f.website ?? "")) return to("ok", done);
+  const email = String(f.email ?? "").trim().toLowerCase().slice(0, 120);
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return to("err", "Please enter a valid email address");
+  if (!(await allow(c.env, `rs:${clientIp(c)}`, 5, 86400))) return to("err", "Too many sign-ups from here today. Please try again tomorrow.");
+  await subscribe(c.env, c.req.url, email);
+  return to("ok", done);
+});
+ratesApp.get("/rates/confirm", async (c) => {
+  const r = await c.env.DB.prepare(`UPDATE rate_subs SET confirmed = 1 WHERE token = ?`).bind(String(c.req.query("t") ?? "")).run();
+  return c.redirect(`/rates?${r.meta.changes ? "ok" : "err"}=${encodeURIComponent(r.meta.changes ? "Confirmed. Your first rate email arrives on the next trading day at 11 am." : "That link is not valid any more. Please sign up again.")}#email`, 303);
+});
+ratesApp.get("/rates/unsubscribe", async (c) => {
+  await c.env.DB.prepare(`DELETE FROM rate_subs WHERE token = ?`).bind(String(c.req.query("t") ?? "")).run();
+  return c.redirect(`/rates?ok=${encodeURIComponent("You will not receive the rate email any more.")}#email`, 303);
+});
+
 ratesApp.get("/widget/rates", async (c) => {
   const r = await getRates(c.env);
   const k = keyRates(r), g = perGram(k), base = siteUrl(c);

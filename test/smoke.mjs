@@ -128,5 +128,8 @@ r = await anon("/requirements?kind=hire"); ok("job post listed under Jobs", r.te
 r = await anon("/requirements?kind=sell"); ok("kind filter excludes others", !r.text.includes("Hiring CAD designer"));
 r = await anon(jobPath); ok("job contact hidden from public", !r.text.includes("9811111111") && r.text.includes("Employer contact"));
 r = await other(jobPath); ok("job contact shown to any signed-in member", r.text.includes("9811111111"));
+r = await anon("/rates/subscribe", { method: "POST", form: { email: "rates@example.test" } }); ok("rate email sign-up", r.loc.includes("ok="));
+r = await anon("/rates/subscribe", { method: "POST", form: { email: "nope" } }); ok("rate email validates address", r.loc.includes("err="));
+r = await anon("/rates/confirm?t=bad"); ok("bad confirm link rejected", r.loc.includes("err="));
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
