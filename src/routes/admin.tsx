@@ -1,5 +1,7 @@
 /** @jsxImportSource hono/jsx */
 import { Hono, type Context } from "hono";
+import { inviteStats, inviteText } from "../invites";
+import { siteUrl } from "../ui";
 import { recount } from "./reviews";
 import { type AppEnv, requireAdmin } from "../auth";
 import { PLACEMENTS, type Placement } from "./ads";
@@ -40,6 +42,8 @@ admin.get("/", async (c) => {
   const found = lq.length >= 3 ? (await db.prepare(`SELECT b.id, b.slug, b.name, b.city, b.source, b.plan, u.email AS owner, EXISTS (SELECT 1 FROM private_contacts p WHERE p.business_id = b.id) AS has_contact FROM businesses b LEFT JOIN users u ON u.id = b.owner_id WHERE b.name LIKE ?1 OR b.gst = ?2 OR b.slug = ?3 ORDER BY (b.owner_id IS NOT NULL) DESC, b.name LIMIT 15`).bind(`%${lq}%`, lq.toUpperCase(), lq.toLowerCase().replace(/^.*\/b\//, "")).all<{ id: number; slug: string; name: string; city: string | null; source: string; plan: string; owner: string | null; has_contact: number }>()).results : [];
   const revs = (await db.prepare(`SELECT r.id, r.rating, r.body, r.status, r.created_at, b.name AS bname, b.slug, u.name AS uname FROM reviews r JOIN businesses b ON b.id = r.business_id JOIN users u ON u.id = r.user_id ORDER BY r.created_at DESC LIMIT 20`).all<{ id: number; rating: number; body: string | null; status: string; created_at: number; bname: string; slug: string; uname: string }>()).results;
   const mailStats = await db.prepare(`SELECT (SELECT count(*) FROM rate_subs WHERE confirmed = 1) AS subs, (SELECT count(*) FROM rate_alerts WHERE fired_at IS NULL) AS alerts`).first<{ subs: number; alerts: number }>();
+  const inv = await inviteStats(c.env);
+  const sample = inviteText(c.env.BRAND_NAME, siteUrl(c), "Your Business Name", "your-business", `${siteUrl(c)}/optout?e=...`);
   const reqs = (await db.prepare(`SELECT id, title, city, name, phone, status, views, created_at, kind FROM requests ORDER BY created_at DESC LIMIT 30`).all<{ id: number; title: string; city: string | null; name: string; phone: string; status: string; views: number; created_at: number }>()).results;
   const banners = (await db.prepare(`SELECT id, title, url, image_id, placement, active, ends_at, views, clicks FROM banners ORDER BY placement, position, id DESC LIMIT 100`).all<{ id: number; title: string; url: string; image_id: number | null; placement: string; active: number; ends_at: number | null; views: number; clicks: number }>()).results;
   return page(c, { title: "Admin", noindex: true }, (
@@ -50,7 +54,7 @@ admin.get("/", async (c) => {
         {([["Businesses", biz?.n], ["Claimed", claimed?.n], ["Members", users?.n], ["Premium", premium?.n], ["Enquiries", enq?.n]] as const).map(([l, n]) => <div class="card stat"><b>{(n ?? 0).toLocaleString("en-IN")}</b><span class="small muted">{l}</span></div>)}
       </div>
 
-      <nav class="row" style="gap:6px;margin:14px 0 0" aria-label="Admin sections">{[["claims", "Claims"], ["payments", "Membership"], ["reports", "Reports"], ["views", "Contact views"], ["board", "Trade board"], ["events", "Events"], ["adleads", "Ad enquiries"], ["listings", "Find a listing"], ["reviews", "Reviews"], ["banners", "Banners"]].map(([i, l]) => <a class="badge" href={`#${i}`}>{l}</a>)}</nav>
+      <nav class="row" style="gap:6px;margin:14px 0 0" aria-label="Admin sections">{[["claims", "Claims"], ["payments", "Membership"], ["reports", "Reports"], ["views", "Contact views"], ["board", "Trade board"], ["events", "Events"], ["adleads", "Ad enquiries"], ["listings", "Find a listing"], ["invites", "Claim invites"], ["reviews", "Reviews"], ["banners", "Banners"]].map(([i, l]) => <a class="badge" href={`#${i}`}>{l}</a>)}</nav>
 
       <section id="claims"><h2 style="font-size:20px;margin-bottom:10px">Claims to review ({claims.results.length})</h2>
         {claims.results.length === 0 ? <div class="card muted small">Nothing waiting.</div> : <div class="card"><table><tr><th>Business</th><th>Claimed by</th><th>Details</th><th></th></tr>
@@ -145,6 +149,19 @@ admin.get("/", async (c) => {
           {revs.map((r) => <tr style={r.status === "live" ? undefined : "opacity:.55"}><td><a class="gold" href={`/b/${r.slug}#reviews`} target="_blank">{r.bname}</a><div class="tiny muted">{r.uname} · {when(r.created_at)}</div></td><td class="small" style="white-space:normal">{"★".repeat(r.rating)} {r.body}</td>
             <td><form method="post" action={`/admin/reviews/${r.id}/${r.status === "live" ? "hidden" : "live"}`}><button class="btn ghost sm" type="submit">{r.status === "live" ? "Hide" : "Show"}</button></form></td></tr>)}</table></div>}
       </section>
+      <section id="invites">
+        <h2 style="font-size:20px;margin-bottom:10px">Claim invitations</h2>
+        <div class="card">
+          <p class="small">One email, once, to unclaimed listings that have an email on record, inviting the owner to claim. Nothing is sent until you press the button.</p>
+          <div class="row small" style="gap:16px;margin:8px 0"><span><b>{inv.eligible.toLocaleString("en-IN")}</b> not yet invited</span><span><b>{inv.sent.toLocaleString("en-IN")}</b> sent</span><span><b>{inv.claimed}</b> claimed after invite</span><span><b>{inv.optout}</b> opted out</span><span><b>{inv.budget}</b> waiting to go</span></div>
+          <details><summary class="small gold">Read the email that will be sent</summary><pre class="small" style="white-space:pre-wrap;background:var(--surface2);padding:12px;border-radius:10px;margin-top:8px">{`Subject: ${sample.subject}\n\n${sample.text}`}</pre></details>
+          <form method="post" action="/admin/invites" class="row" style="margin-top:10px" data-confirm="Send these invitation emails? They cannot be recalled.">
+            <label style="flex:0 0 220px">How many to send now<input name="n" type="number" min={0} max={300} value="50" /></label>
+            <button class="btn sm" type="submit">Send invitations</button>
+          </form>
+          <p class="tiny muted">Sent at about 10 a minute. Start with 50 a day and watch replies and opt-outs before sending more: mail to old addresses bounces, and too many bounces can get the site's email blocked. Enter 0 to stop a batch that is waiting.</p>
+        </div>
+      </section>
       <section id="banners">
         <h2 style="font-size:20px;margin-bottom:10px">Banner ads and sponsors</h2>
         <div class="grid g2">
@@ -210,6 +227,11 @@ admin.post("/listings/:id/:action{hide-contact|release|delete}", async (c) => {
   if (action === "release") { await db.prepare(`UPDATE businesses SET owner_id = NULL WHERE id = ?`).bind(id).run(); return back(c, "Owner removed"); }
   await db.batch(["products", "links", "extras", "images", "enquiries", "claims", "payments", "business_types", "private_contacts", "reveals", "reviews", "reports", "claim_codes", "saved"].map((t) => db.prepare(`DELETE FROM ${t} WHERE business_id = ?`).bind(id)).concat(db.prepare(`DELETE FROM businesses WHERE id = ?`).bind(id)));
   return back(c, "Listing deleted");
+});
+admin.post("/invites", async (c) => {
+  const n = Math.max(0, Math.min(300, Math.round(Number((await c.req.parseBody()).n) || 0)));
+  await setMeta(c.env, "invite_budget", String(n));
+  return back(c, n ? `${n} invitations queued. They go out over the next few minutes.` : "Invitations stopped");
 });
 admin.post("/banners", async (c) => {
   const f = await c.req.parseBody();

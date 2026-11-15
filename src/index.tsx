@@ -10,6 +10,7 @@ import { ratesApp } from "./routes/rates";
 import { toolsApp } from "./routes/tools";
 import { weeklyDigest } from "./digest";
 import { checkAlerts, dailyRates } from "./ratemail";
+import { sendInvites } from "./invites";
 import { refreshNews } from "./news";
 import { market } from "./routes/market";
 import { info } from "./routes/info";
@@ -65,6 +66,7 @@ export default {
       try { await snapshotRates(env); } catch (e) { console.error("rates", e); }
       try { await dailyRates(env); } catch (e) { console.error("ratemail", e); }
       try { await checkAlerts(env); } catch (e) { console.error("alerts", e); }
+      try { await sendInvites(env); } catch (e) { console.error("invites", e); }
       try { await importJtBatch(env, 4); } catch (e) { console.error("jt import", e); }
       await env.DB.prepare(`DELETE FROM sessions WHERE expires_at < ?`).bind(now()).run();
     })());

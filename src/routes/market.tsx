@@ -1,5 +1,6 @@
 /** @jsxImportSource hono/jsx */
 import { Hono } from "hono";
+import { optToken } from "../invites";
 import { BOT_MSG, Turnstile, humanOk } from "../turnstile";
 import type { Context } from "hono";
 import { type AppEnv, clientIp } from "../auth";
@@ -186,6 +187,15 @@ market.get("/events", async (c) => {
         <div class="stack" style="margin-top:14px">{rows.map((e) => <div class="card"><b>{e.title}</b><div class="small muted" style="margin-top:4px">📅 {day(e.starts_on)}{e.ends_on && e.ends_on !== e.starts_on ? ` to ${day(e.ends_on)}` : ""}{e.venue || e.city ? ` · 📍 ${[e.venue, e.city].filter(Boolean).join(", ")}` : ""}</div>{e.details && <p class="small" style="white-space:pre-line">{e.details}</p>}{safeUrl(e.url) && <a class="gold small" href={safeUrl(e.url)!} target="_blank" rel="nofollow noopener">Organiser's website →</a>}</div>)}</div>
       )}
     </main>
+  ));
+});
+
+market.get("/optout", async (c) => {
+  const email = s(c.req.query("e"), 160).toLowerCase();
+  const ok = !!email && (await optToken(c.env, email)) === c.req.query("t");
+  if (ok) await c.env.DB.prepare(`INSERT OR IGNORE INTO mail_optout (email, created_at) VALUES (?, ?)`).bind(email, now()).run();
+  return page(c, { title: "Email preferences", noindex: true }, (
+    <main class="wrap narrow center" style="padding-top:60px"><div class="card"><h1 style="font-size:22px">{ok ? "Done. We will not email this address again." : "This link is not valid"}</h1><p class="muted small">{ok ? "Your listing stays in the directory. To correct or remove it, use the report link on the listing page." : "Please use the link from the email."}</p></div></main>
   ));
 });
 
