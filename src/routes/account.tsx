@@ -131,6 +131,7 @@ account.get("/dashboard", async (c) => {
     db.prepare(`SELECT (SELECT coalesce(sum(clicks),0) FROM products WHERE business_id = ?1) + (SELECT coalesce(sum(clicks),0) FROM links WHERE business_id = ?1) AS n`).bind(b.id).first<{ n: number }>(),
   ]);
   const base = siteUrl(c);
+  const reqs = (await db.prepare(`SELECT id, title, qty, city FROM requests WHERE status = 'open' AND created_at > ? ORDER BY created_at DESC LIMIT 4`).bind(now() - 30 * 86400).all<{ id: number; title: string; qty: string | null; city: string | null }>()).results;
   return shell(c, b.name, (
     <div class="stack">
       <div class="grid g4">
@@ -146,12 +147,27 @@ account.get("/dashboard", async (c) => {
         ))}
         <div class="row"><a class="btn ghost sm" href={`/b/${b.slug}/qr.svg`} target="_blank">Download QR code</a></div>
       </div>
-      <div class="card small muted">
-        Next steps: {(p?.n ?? 0) === 0 && <><a class="gold" href="/dashboard/products">add your first product</a> · </>}
-        {(l?.n ?? 0) === 0 && <><a class="gold" href="/dashboard/links">add links to your bio page</a> · </>}
-        {!b.about && <><a class="gold" href="/dashboard/profile">write an About section</a> · </>}
-        share your bio link on WhatsApp and Instagram.
-      </div>
+      {(() => {
+        const steps: [boolean, string, string][] = [
+          [!!b.logo_image, "Add your logo", "/dashboard/profile"], [!!b.about, "Write an About section", "/dashboard/profile"],
+          [!!(b.phone || b.whatsapp), "Add your phone or WhatsApp number", "/dashboard/profile"], [!!b.address, "Add your address and hours", "/dashboard/profile"],
+          [(p?.n ?? 0) > 0, "Add your first product", "/dashboard/products"], [(l?.n ?? 0) > 0, "Add links to your bio page", "/dashboard/links"],
+        ];
+        const done = steps.filter((x) => x[0]).length, pct = Math.round((done / steps.length) * 100);
+        return (
+          <div class="card">
+            <div class="row between"><b>Your listing is {pct}% complete</b><span class="small muted">{done} of {steps.length} done</span></div>
+            <div style="height:8px;border-radius:99px;background:var(--surface2);margin:10px 0;overflow:hidden"><div style={`height:100%;width:${pct}%;background:var(--gold-bg)`} /></div>
+            <ul class="todo small" style="list-style:none;padding:0;margin:0">{steps.map(([ok, label, href]) => <li>{ok ? <span class="done">✓ {label}</span> : <a class="gold" href={href}>○ {label} →</a>}</li>)}</ul>
+            <p class="tiny muted" style="margin-bottom:0">Complete listings appear more trustworthy to buyers. Then share your bio link on WhatsApp and Instagram.</p>
+          </div>
+        );
+      })()}
+      {reqs.length > 0 && (
+        <div class="card"><div class="row between"><b>New buy requirements</b><a class="gold small" href="/requirements">See all →</a></div>
+          {reqs.map((r) => <a style="display:block;padding:8px 0;border-top:1px solid var(--border);margin-top:8px" href={`/requirements/${r.id}`}><span class="small">{r.title}</span><div class="tiny muted">{[r.qty, r.city].filter(Boolean).join(" · ")}</div></a>)}
+        </div>
+      )}
     </div>
   ));
 });

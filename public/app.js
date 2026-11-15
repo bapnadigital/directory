@@ -37,3 +37,30 @@ document.addEventListener("change", function (e) {
 
 // Filters open by default on wide screens.
 if (window.innerWidth > 900) document.querySelectorAll("details.flt").forEach(function (d) { d.open = true; });
+
+// Search suggestions for the header and hero search boxes.
+(function () {
+  document.querySelectorAll('form.hsearch input[name=q], form.search input[name=q]').forEach(function (inp) {
+    var box = document.createElement("div"); box.className = "sugg"; box.hidden = true;
+    inp.parentNode.style.position = "relative"; inp.parentNode.appendChild(box); inp.setAttribute("autocomplete", "off");
+    var t = 0, last = "";
+    inp.addEventListener("input", function () {
+      clearTimeout(t); var q = inp.value.trim();
+      if (q.length < 2) { box.hidden = true; return; }
+      t = setTimeout(function () {
+        last = q;
+        fetch("/api/suggest?q=" + encodeURIComponent(q)).then(function (r) { return r.json(); }).then(function (j) {
+          if (last !== q) return;
+          box.textContent = "";
+          (j.items || []).forEach(function (it) {
+            var a = document.createElement("a"); a.href = it.url; a.textContent = it.label;
+            if (it.sub) { var s = document.createElement("span"); s.textContent = " · " + it.sub; a.appendChild(s); }
+            box.appendChild(a);
+          });
+          box.hidden = !box.childNodes.length;
+        }).catch(function () {});
+      }, 180);
+    });
+    document.addEventListener("click", function (e) { if (!inp.parentNode.contains(e.target)) box.hidden = true; });
+  });
+})();

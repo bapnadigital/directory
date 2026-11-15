@@ -27,9 +27,10 @@ function where(f: Filters): { sql: string; args: unknown[] } {
   const parts: string[] = [];
   const args: unknown[] = [];
   const q = (f.q ?? "").trim().slice(0, 60);
-  if (q.length >= 2) {
-    parts.push(`(b.name LIKE ? OR b.gst LIKE ? OR b.city LIKE ?)`);
-    args.push(`%${q}%`, `%${q.toUpperCase()}%`, `%${q}%`);
+  // Every word must match the name, city, state or GSTIN, so "bangles mumbai" works.
+  for (const w of q.split(/\s+/).filter((x) => x.length >= 2).slice(0, 5)) {
+    parts.push(`(b.name LIKE ? OR b.city LIKE ? OR b.state LIKE ? OR b.gst LIKE ?)`);
+    args.push(`%${w}%`, `%${w}%`, `%${w}%`, `%${w.toUpperCase()}%`);
   }
   if (f.city) { parts.push(`b.city_slug = ?`); args.push(f.city); }
   if (f.state) { parts.push(`b.state = ?`); args.push(f.state); }
@@ -51,6 +52,16 @@ async function search(db: D1Database, f: Filters, pageNo: number) {
   ]);
   return { rows: rows.results, total: count?.n ?? 0 };
 }
+
+pub.get("/api/suggest", async (c) => {
+  const q = (c.req.query("q") ?? "").trim().slice(0, 40);
+  if (q.length < 2) return c.json({ items: [] });
+  const ql = q.toLowerCase();
+  const cities = CITIES.filter((x) => x.label.toLowerCase().startsWith(ql)).slice(0, 2).map((x) => ({ label: `Jewellers in ${x.label}`, url: `/city/${x.slug}` }));
+  const types = TRADE_TYPES.filter((x) => x.label.toLowerCase().includes(ql)).slice(0, 2).map((x) => ({ label: x.label, url: `/category/${x.slug}` }));
+  const rows = (await c.env.DB.prepare(`SELECT slug, name, city FROM businesses WHERE name LIKE ? ORDER BY (owner_id IS NOT NULL) DESC, views DESC LIMIT 6`).bind(`${q}%`).all<{ slug: string; name: string; city: string | null }>()).results;
+  return c.json({ items: [...cities, ...types, ...rows.map((r) => ({ label: r.name, sub: r.city, url: `/b/${r.slug}` }))] }, 200, { "cache-control": "public, max-age=120" });
+});
 
 // ───────────────────────── Home ─────────────────────────
 let homeCache: { at: number; featured: D1Result<Card>; latest: D1Result<Card>; total: { n: number } | null } | null = null;
@@ -424,6 +435,7 @@ pub.get("/b/:slug", async (c) => {
           <a class="btn ghost sm" href={maps} rel="nofollow noopener" target="_blank">Map</a>
           <a class="btn ghost sm" href={`/bio/${b.slug}`}>Bio link</a>
           <a class="btn ghost sm" href={`/b/${b.slug}/qr.svg`} target="_blank">QR code</a>
+          <a class="btn ghost sm" href={`https://wa.me/?text=${encodeURIComponent(`${b.name}${b.city ? `, ${b.city}` : ""}\n${url}`)}`} target="_blank" rel="noopener">Share</a>
           <button class="btn ghost sm" data-copy={url}>Copy link</button>
         </div>
       </div>

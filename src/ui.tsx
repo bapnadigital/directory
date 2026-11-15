@@ -37,9 +37,16 @@ export function page(c: Context<AppEnv>, o: PageOpts, body: Child) {
         {o.desc && <meta property="og:description" content={o.desc} />}
         {canonical && <meta property="og:url" content={canonical} />}
         <meta name="theme-color" content="#0b1f44" />
+        <meta property="og:image" content={`${siteUrl(c)}/og.png`} />
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content={brand} />
+        <meta name="twitter:card" content="summary_large_image" />
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        <link rel="manifest" href="/manifest.webmanifest" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@600;700;800&display=swap" />
-        <link rel="stylesheet" href="/style.css?v=4" />
+        <link rel="stylesheet" href="/style.css?v=5" />
         {o.jsonld != null && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(o.jsonld).replace(/</g, "\\u003c") }} />}
       </head>
       <body style={o.bodyStyle}>
@@ -75,7 +82,7 @@ export function page(c: Context<AppEnv>, o: PageOpts, body: Child) {
             </div>
           </footer>
         )}
-        <script src="/app.js?v=4" defer></script>
+        <script src="/app.js?v=5" defer></script>
         <script src="/tools.js?v=4" defer></script>
       </body>
     </html>,

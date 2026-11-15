@@ -29,7 +29,7 @@ r = await anon("/directory"); ok("directory lists seeded businesses", r.status =
 r = await anon("/directory?q=diam"); ok("search filters", r.text.includes("Sparkle Diam") && !r.text.includes("Test Gold Jewellers"));
 r = await anon("/city/mumbai"); ok("city page", r.status === 200 && r.text.includes("Jewellers in Mumbai"));
 r = await anon("/category/diamonds"); ok("category page (keyword match)", r.status === 200 && r.text.includes("Sparkle Diam"));
-r = await anon("/b/test-gold-jewellers"); ok("unclaimed listing hides contact + shows claim", r.status === 200 && r.text.includes("Claim this listing") && !r.text.includes("wa.me"));
+r = await anon("/b/test-gold-jewellers"); ok("unclaimed listing hides contact + shows claim", r.status === 200 && r.text.includes("Claim this listing") && !r.text.includes("wa.me/9") && !r.text.includes("tel:"));
 r = await anon("/nope"); ok("404 page", r.status === 404);
 r = await anon("/robots.txt"); ok("robots.txt", r.text.includes("Sitemap:"));
 r = await anon("/sitemap.xml"); ok("sitemap index", r.text.includes("/sitemap/b-1.xml"));
