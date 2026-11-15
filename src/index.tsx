@@ -30,8 +30,8 @@ export default {
   async scheduled(_ev: ScheduledController, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil((async () => {
       await ensureSchema(env);
-      try { await importBatch(env, 4); } catch (e) { console.error("import", e); }
-      try { await importJtBatch(env, 1); } catch (e) { console.error("jt import", e); }
+      try { await importBatch(env, 8); } catch (e) { console.error("import", e); }
+      try { await importJtBatch(env, 4); } catch (e) { console.error("jt import", e); }
       await env.DB.prepare(`DELETE FROM sessions WHERE expires_at < ?`).bind(now()).run();
     })());
   },
