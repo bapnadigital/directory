@@ -84,7 +84,7 @@ export function page(c: Context<AppEnv>, o: PageOpts, body: Child) {
           </footer>
         )}
         <script src="/app.js?v=5" defer></script>
-        <script src="/tools.js?v=4" defer></script>
+        <script src="/tools.js?v=5" defer></script>
       </body>
     </html>,
   );

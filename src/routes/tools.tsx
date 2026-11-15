@@ -36,6 +36,17 @@ export const TOOLS: Tool[] = [
     ],
     how: ["Net weight = gross weight minus stones and other material.", "Fine gold = net weight × tested purity.", "Value = fine gold × 24K rate, less the dealer's deduction for melting and refining."],
     faq: [["Is GST charged when I sell old gold?", "A consumer selling old jewellery to a jeweller does not charge GST. GST applies on the new jewellery you buy in exchange."], ["What deduction is normal?", "It varies by dealer and city. Ask for the purity test result and the deduction in writing before agreeing."]] },
+  { slug: "gold-landed-cost-calculator", icon: "🚢", name: "Gold landed cost calculator", short: "International price to rupees per 10 g and per kg, with duty and premium.",
+    desc: "Work out the landed cost of gold in India from the international price in dollars per ounce, the dollar-rupee rate, import duty and local premium, and compare it with the market rate.",
+    fields: [
+      { id: "usd", label: "International gold price ($ per troy ounce)", live: "goldUsd", step: "0.01" },
+      { id: "inr", label: "USD / INR", live: "usdInr", step: "0.01" },
+      { id: "duty", label: "Total import duty and cess (%)", value: "6", step: "0.01", hint: "Enter the rate in force today. Duty changes with the Budget and notifications; 6% is only a starting value." },
+      { id: "premium", label: "Premium or discount ($ per ounce)", value: "0", step: "0.01" },
+      { id: "purity", label: "Bar purity", type: "select", options: [["0.995", "995"], ["0.999", "999"]] },
+    ],
+    how: ["Price per gram of fine gold in rupees = (international price + premium) × USD/INR ÷ 31.1035.", "Multiply by the bar purity, then add import duty on that value.", "3% GST is added on top to compare with a with-GST market quote. Bank charges, freight and insurance are not included."],
+    faq: [["Why is my dealer's rate different from this?", "Local rates also carry bank and logistics costs, the day's demand and supply premium or discount, and the dealer's margin. Use this as a parity check, not a quote."], ["Which duty rate should I enter?", "The total of basic customs duty and any cess that applies on the day. Check the latest customs notification or ask your bullion dealer."]] },
   { slug: "bullion-rate-converter", icon: "🔁", name: "995 / 999 bullion rate converter", short: "Put 995 and 999 rates, with or without GST, on one basis.",
     desc: "Convert a gold bullion rate between 995 and 999 purity and between with-GST and without-GST, so two quotes can be compared like for like.",
     fields: [

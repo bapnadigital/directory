@@ -97,6 +97,7 @@ ratesApp.get("/rates", async (c) => {
                 <div><div class="tiny muted">Gold $/oz</div><b data-rate="goldUsd">{k.goldUsd ?? "—"}</b></div>
                 <div><div class="tiny muted">Silver $/oz</div><b data-rate="silverUsd">{k.silverUsd ?? "—"}</b></div>
                 <div><div class="tiny muted">USD / INR</div><b data-rate="usdInr">{k.usdInr ?? "—"}</b></div>
+                {k.goldUsd && k.silverUsd ? <div><div class="tiny muted">Gold : silver ratio</div><b>{(k.goldUsd / k.silverUsd).toFixed(1)}</b></div> : null}
               </div>
             </div>
           </div>
@@ -199,6 +200,7 @@ ratesApp.post("/rates/alerts", async (c) => {
   const u = c.get("user");
   if (!u) return c.redirect("/login?next=%2Frates%23alerts", 303);
   const to = (k: string, m: string) => c.redirect(`/rates?${k}=${encodeURIComponent(m)}#alerts`, 303);
+  if (!(await allow(c.env, `ra:${u.id}`, 30, 86400))) return to("aerr", "Too many alerts set today. Please try again tomorrow.");
   const f = await c.req.parseBody();
   const metal = String(f.metal), dir = String(f.dir), target = Math.round(Number(f.target));
   if (!(metal in ALERT_METALS) || !["above", "below"].includes(dir) || !Number.isFinite(target) || target < 1000 || target > 9999999) return to("aerr", "Please choose a metal, a direction and a target rate in rupees");

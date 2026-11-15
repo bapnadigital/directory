@@ -131,6 +131,7 @@ account.get("/dashboard", async (c) => {
     db.prepare(`SELECT (SELECT coalesce(sum(clicks),0) FROM products WHERE business_id = ?1) + (SELECT coalesce(sum(clicks),0) FROM links WHERE business_id = ?1) AS n`).bind(b.id).first<{ n: number }>(),
   ]);
   const base = siteUrl(c);
+  const mine = (await db.prepare(`SELECT id, title, status, views, kind FROM requests WHERE user_id = ? ORDER BY created_at DESC LIMIT 10`).bind(c.get("user")!.id).all<{ id: number; title: string; status: string; views: number; kind: string }>()).results;
   const reqs = (await db.prepare(`SELECT id, title, qty, city FROM requests WHERE status = 'open' AND created_at > ? ORDER BY created_at DESC LIMIT 4`).bind(now() - 30 * 86400).all<{ id: number; title: string; qty: string | null; city: string | null }>()).results;
   return shell(c, b.name, (
     <div class="stack">
@@ -163,8 +164,14 @@ account.get("/dashboard", async (c) => {
           </div>
         );
       })()}
+      {mine.length > 0 && (
+        <div class="card"><div class="row between"><b>Your trade board posts</b><a class="gold small" href="/requirements/new">Post another →</a></div>
+          {mine.map((r) => <div class="row between" style="padding:8px 0;border-top:1px solid var(--border);margin-top:8px"><a class="small" href={`/requirements/${r.id}`}>{r.title}<div class="tiny muted">{r.kind} · {r.status} · {r.views} contact views</div></a>
+            {r.status === "open" ? <form method="post" action={`/requirements/${r.id}/close`} data-confirm="Close this post?"><button class="btn ghost sm" type="submit">Close</button></form> : null}</div>)}
+        </div>
+      )}
       {reqs.length > 0 && (
-        <div class="card"><div class="row between"><b>New buy requirements</b><a class="gold small" href="/requirements">See all →</a></div>
+        <div class="card"><div class="row between"><b>New on the trade board</b><a class="gold small" href="/requirements">See all →</a></div>
           {reqs.map((r) => <a style="display:block;padding:8px 0;border-top:1px solid var(--border);margin-top:8px" href={`/requirements/${r.id}`}><span class="small">{r.title}</span><div class="tiny muted">{[r.qty, r.city].filter(Boolean).join(" · ")}</div></a>)}
         </div>
       )}

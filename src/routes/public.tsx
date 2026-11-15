@@ -22,6 +22,7 @@ const CARD_COLS = `b.id, b.slug, b.name, b.city, b.owner_id, b.plan, b.plan_expi
 const ORDER = `ORDER BY (b.plan = 'premium' AND (b.plan_expires IS NULL OR b.plan_expires > strftime('%s','now'))) DESC,
   (b.owner_id IS NOT NULL) DESC, b.created_at DESC, b.id DESC`;
 const PAGE_SIZE = 24;
+const crumbs = (c: Context<AppEnv>, items: [string, string][]) => ({ "@context": "https://schema.org", "@type": "BreadcrumbList", itemListElement: [["Directory", "/directory"] as [string, string], ...items].map(([name, path], i) => ({ "@type": "ListItem", position: i + 1, name, item: `${siteUrl(c)}${path}` })) });
 
 type Filters = { q?: string; city?: string; type?: string; claimed?: boolean; state?: string; sort?: string };
 
@@ -268,8 +269,8 @@ pub.get("/city/:slug", async (c) => {
     title: `Jewellers in ${city.label} — manufacturers, wholesalers, retailers`,
     desc: `${data.total.toLocaleString("en-IN")} jewellery businesses in ${city.label} (${city.note}). View catalogues and contact them directly.`,
     path: `/city/${city.slug}`, noindex: p > 1 || !!f.q || !!f.sort,
-    jsonld: { "@context": "https://schema.org", "@type": "ItemList", name: `Jewellers in ${city.label}`, numberOfItems: data.total,
-      itemListElement: data.rows.slice(0, 20).map((b, i) => ({ "@type": "ListItem", position: i + 1, name: b.name, url: `${siteUrl(c)}/b/${b.slug}` })) },
+    jsonld: [{ "@context": "https://schema.org", "@type": "ItemList", name: `Jewellers in ${city.label}`, numberOfItems: data.total,
+      itemListElement: data.rows.slice(0, 20).map((b, i) => ({ "@type": "ListItem", position: i + 1, name: b.name, url: `${siteUrl(c)}/b/${b.slug}` })) }, crumbs(c, [[city.label, `/city/${city.slug}`]])],
   }, listing(`Jewellers in ${city.label}`, city.note, `/city/${city.slug}`, f, p, data, false, c,
     findCity(city.slug) ? <div class="row" style="gap:6px;margin:10px 0 0">{TRADE_TYPES.map((x) => <a class="badge" href={`/city/${city.slug}/${x.slug}`}>{x.label}</a>)}</div> : undefined));
 });
@@ -283,6 +284,7 @@ pub.get("/city/:slug/:type", async (c) => {
   return page(c, {
     title: `${t.label} in ${city.label}`, desc: `${data.total.toLocaleString("en-IN")} ${t.label.toLowerCase()} in ${city.label} (${city.note}). View details and contact options.`,
     path: `/city/${city.slug}/${t.slug}`, noindex: p > 1 || !!f.q || data.total < 3,
+    jsonld: crumbs(c, [[city.label, `/city/${city.slug}`], [t.label, `/city/${city.slug}/${t.slug}`]]),
   }, listing(`${t.label} in ${city.label}`, city.note, `/city/${city.slug}/${t.slug}`, f, p, data, false, c,
     <div class="row" style="gap:6px;margin:10px 0 0"><a class="badge" href={`/city/${city.slug}`}>All in {city.label}</a>{TRADE_TYPES.map((x) => <a class={`badge ${x.slug === t.slug ? "gold" : ""}`} href={`/city/${city.slug}/${x.slug}`}>{x.label}</a>)}</div>));
 });
@@ -293,7 +295,7 @@ pub.get("/category/:slug", async (c) => {
   const f: Filters = { q: c.req.query("q"), type: t.slug, claimed: c.req.query("claimed") === "1", sort: ["name", "views", "rated"].includes(c.req.query("sort") ?? "") ? c.req.query("sort") : undefined };
   const p = pageNum(c.req.query("page"));
   const data = await search(c.env.DB, f, p);
-  return page(c, { title: `${t.label} — jewellery trade directory`, desc: `Find ${t.label.toLowerCase()} in the Indian jewellery trade. ${data.total.toLocaleString("en-IN")} businesses listed.`, path: `/category/${t.slug}`, noindex: p > 1 || !!f.q },
+  return page(c, { title: `${t.label} — jewellery trade directory`, desc: `Find ${t.label.toLowerCase()} in the Indian jewellery trade. ${data.total.toLocaleString("en-IN")} businesses listed.`, path: `/category/${t.slug}`, jsonld: crumbs(c, [["Categories", "/categories"], [t.label, `/category/${t.slug}`]]), noindex: p > 1 || !!f.q },
     listing(t.label, "Businesses tagged by their owners appear first.", `/category/${t.slug}`, f, p, data, false, c));
 });
 
@@ -330,6 +332,7 @@ pub.get("/state/:slug", async (c) => {
     title: `Jewellers in ${st.label} — manufacturers, wholesalers, bullion dealers, retailers`,
     desc: `${data.total.toLocaleString("en-IN")} jewellery businesses in ${st.label}. Search by name or city, view catalogues and send enquiries.`,
     path: `/state/${st.slug}`, noindex: p > 1 || !!f.q || !!f.sort,
+    jsonld: crumbs(c, [["States", "/states"], [st.label, `/state/${st.slug}`]]),
   }, listing(`Jewellers in ${st.label}`, "All listed jewellery and allied businesses in the state.", `/state/${st.slug}`, f, p, data, false, c));
 });
 

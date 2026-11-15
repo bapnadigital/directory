@@ -10,6 +10,8 @@
     var base995 = k.gold995 || (k.gold995gst ? k.gold995gst / 1.03 : null);
     if (base995) o.fine10 = Math.round(base995 / 0.995);
     if (k.silverGst) o.silverKg = Math.round(k.silverGst / 1.03);
+    if (k.goldUsd) o.goldUsd = k.goldUsd;
+    if (k.usdInr) o.usdInr = k.usdInr;
     return o;
   }
   var CALC = {
@@ -22,6 +24,10 @@
     "old-gold-exchange-calculator": function (v) {
       var net = Math.max(0, v.weight - (v.less || 0)), fine = net * v.purityPct / 100, val = fine * v.rate / 10, ded = val * v.deduct / 100;
       return row("Net weight", num(net) + " g") + row("Fine gold content", num(fine) + " g") + row("Value at 24K rate", fmt(val)) + row("Deduction", "− " + fmt(ded)) + row("Estimated value", fmt(val - ded), 1);
+    },
+    "gold-landed-cost-calculator": function (v) {
+      var p = parseFloat(v.purity), g = (v.usd + (v.premium || 0)) * v.inr / 31.1035 * p, landed = g * (1 + (v.duty || 0) / 100);
+      return row("Landed cost per 10 g, without GST", fmt(landed * 10), 1) + row("With 3% GST, per 10 g", fmt(landed * 10.3)) + row("Per kg, without GST", fmt(landed * 1000)) + row("Before duty, per 10 g", fmt(g * 10)) + row("Duty per 10 g", fmt((landed - g) * 10));
     },
     "bullion-rate-converter": function (v) {
       var ex = (v.gstIn === "1" ? v.rate / 1.03 : v.rate) + (v.premium || 0), p = parseFloat(v.from);

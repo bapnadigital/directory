@@ -84,7 +84,7 @@ reviews.post("/b/:slug/review/:id/reply", async (c) => {
   const b = await c.env.DB.prepare(`SELECT id, owner_id FROM businesses WHERE slug = ?`).bind(slug).first<{ id: number; owner_id: number | null }>();
   if (!u || !b || b.owner_id !== u.id) return c.text("Not allowed", 403);
   const reply = s((await c.req.parseBody()).reply, 400);
-  if (reply) await c.env.DB.prepare(`UPDATE reviews SET reply = ? WHERE id = ? AND business_id = ?`).bind(reply, Number(c.req.param("id")), b.id).run();
+  if (reply && (await allow(c.env, `rr:${u.id}`, 40, 86400))) await c.env.DB.prepare(`UPDATE reviews SET reply = ? WHERE id = ? AND business_id = ?`).bind(reply, Number(c.req.param("id")), b.id).run();
   return c.redirect(`/b/${slug}?rok=${encodeURIComponent("Reply posted")}#reviews`, 303);
 });
 
@@ -101,6 +101,7 @@ reviews.post("/b/:slug/save", async (c) => {
   if (!u) return c.redirect(`/login?next=${encodeURIComponent(`/b/${slug}`)}`, 303);
   const b = await c.env.DB.prepare(`SELECT id FROM businesses WHERE slug = ?`).bind(slug).first<{ id: number }>();
   if (!b) return c.notFound();
+  if (!(await allow(c.env, `sv:${u.id}`, 300, 86400))) return c.redirect(`/b/${slug}`, 303);
   if (await isSaved(c.env.DB, u.id, b.id)) await c.env.DB.prepare(`DELETE FROM saved WHERE user_id = ? AND business_id = ?`).bind(u.id, b.id).run();
   else {
     const n = await c.env.DB.prepare(`SELECT count(*) AS n FROM saved WHERE user_id = ?`).bind(u.id).first<{ n: number }>();

@@ -147,5 +147,7 @@ r = await owner(ownPath + "/close", { method: "POST" }); r = await anon(ownPath)
 r = await other(ownPath + "/close", { method: "POST" }); r = await anon(ownPath); ok("poster can close own post", r.text.includes("Closed"));
 r = await owner("/dashboard/reviews"); ok("owner reviews page", r.status === 200 && r.text.includes("Ask customers for a review") && r.text.includes("Updated"));
 r = await anon("/guides/995-vs-999-gold"); ok("guide has article markup", r.text.includes('"@type":"Article"'));
+r = await anon("/tools/gold-landed-cost-calculator"); ok("landed cost calculator", r.status === 200 && r.text.includes("landed cost"));
+r = await anon("/city/mumbai"); ok("city page has breadcrumbs", r.text.includes("BreadcrumbList"));
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
