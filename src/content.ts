@@ -14,7 +14,7 @@ export const TRADE_TYPES = [
   { slug: "tools", label: "Tools & machinery", keyword: "tools", icon: "🛠️" },
   { slug: "pearls", label: "Pearls", keyword: "pearl", icon: "🦪" },
   { slug: "packaging", label: "Packaging & display", keyword: "packag", icon: "🎁" },
-  { slug: "allied", label: "Allied services", keyword: "\u0000allied", icon: "🤝" },
+  { slug: "allied", label: "Allied services", keyword: "zz-allied-zz", icon: "🤝" },
 ] as const;
 export const findType = (slug?: string | null) => TRADE_TYPES.find((t) => t.slug === slug);
 
