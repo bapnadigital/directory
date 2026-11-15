@@ -12,13 +12,28 @@ export async function refreshNews(env: Env): Promise<number> {
   const turn = Number((await getMeta(env, "news_turn")) ?? 0);
   await setMeta(env, "news_turn", String((turn + 1) % QUERIES.length));
   const q = QUERIES[turn % QUERIES.length];
-  const res = await fetch(`https://news.google.com/rss/search?q=${encodeURIComponent(`${q} when:7d`)}&hl=en-IN&gl=IN&ceid=IN:en`, { headers: { "user-agent": "Mozilla/5.0 (compatible; JewellerySahiHai/1.0)" }, signal: AbortSignal.timeout(8000) });
-  if (!res.ok) { await setMeta(env, "news_note", `${q}: source returned ${res.status}`); return 0; }
-  const xml = await res.text();
+  const ua = { "user-agent": "Mozilla/5.0 (compatible; JewellerySahiHai/1.0)" };
+  // Google News first; if it refuses (it often answers 503 to servers), fall back to Bing News.
+  let xml = "", from = "google", status = 0;
+  try {
+    const res = await fetch(`https://news.google.com/rss/search?q=${encodeURIComponent(`${q} when:7d`)}&hl=en-IN&gl=IN&ceid=IN:en`, { headers: ua, signal: AbortSignal.timeout(8000) });
+    status = res.status;
+    if (res.ok) xml = await res.text();
+  } catch { /* fall through */ }
+  if (!xml.includes("<item>")) {
+    from = "bing";
+    try {
+      const res = await fetch(`https://www.bing.com/news/search?q=${encodeURIComponent(q)}&format=rss&cc=IN&setlang=en-IN&qft=${encodeURIComponent('interval="8"')}`, { headers: ua, signal: AbortSignal.timeout(8000) });
+      if (res.ok) xml = await res.text(); else status = res.status;
+    } catch { /* nothing */ }
+  }
+  if (!xml.includes("<item>")) { await setMeta(env, "news_note", `${q}: no source answered (last status ${status})`); return 0; }
   const items = xml.split("<item>").slice(1, 26);
   const stmts = [];
   for (const it of items) {
-    let title = tag(it, "title"); const link = tag(it, "link"), source = tag(it, "source"), pub = Date.parse(tag(it, "pubDate")) / 1000;
+    let title = tag(it, "title"), link = tag(it, "link"); const source = tag(it, "source") || tag(it, "News:Source"), pub = Date.parse(tag(it, "pubDate")) / 1000;
+    const real = link.match(/[?&]url=([^&]+)/); // Bing wraps the publisher link
+    if (real) { try { link = decodeURIComponent(real[1]); } catch { /* keep */ } }
     if (!title || !/^https?:\/\//.test(link)) continue;
     if (/^top \d+|best \d+|\bOEM\b|coupon|promo code|horoscope|press release/i.test(title)) continue;
     if (source && title.endsWith(` - ${source}`)) title = title.slice(0, -(source.length + 3));
@@ -26,7 +41,7 @@ export async function refreshNews(env: Env): Promise<number> {
       .bind(title.slice(0, 220), link.slice(0, 900), source.slice(0, 80) || null, q, Number.isFinite(pub) ? Math.floor(pub) : now(), now()));
   }
   if (stmts.length) await env.DB.batch(stmts);
-  await setMeta(env, "news_note", `${q}: ${items.length} items read, ${stmts.length} kept`);
+  await setMeta(env, "news_note", `${q} (${from}): ${items.length} items read, ${stmts.length} kept`);
   await env.DB.prepare(`DELETE FROM news WHERE id NOT IN (SELECT id FROM news ORDER BY published_at DESC LIMIT 800)`).run();
   return stmts.length;
 }
