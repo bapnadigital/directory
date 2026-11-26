@@ -107,3 +107,5 @@ section+section{padding-top:22px}.biz .top img{object-fit:contain}
 a:focus-visible,button:focus-visible,.btn:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible{outline:2px solid var(--navy);outline-offset:2px}
 section[id]{scroll-margin-top:80px}
 .skip{position:absolute;left:-9999px}.skip:focus{left:10px;top:10px;z-index:99;background:#fff;padding:8px 12px;border-radius:8px}
+
+.claimbar{border-color:var(--gold-bg);background:#fffaf0}

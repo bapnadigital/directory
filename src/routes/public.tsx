@@ -1,5 +1,7 @@
 /** @jsxImportSource hono/jsx */
 import { Hono, type Context } from "hono";
+import { isBot, today as statDay } from "./growth";
+import { optToken } from "../invites";
 import { BOT_MSG, Turnstile, humanOk } from "../turnstile";
 import type { Child } from "hono/jsx";
 import QRCode from "qrcode-svg";
@@ -18,14 +20,14 @@ import { BizCard, type Card, Field, Flash, page, siteUrl } from "../ui";
 
 export const pub = new Hono<AppEnv>();
 
-const CARD_COLS = `b.id, b.slug, b.name, b.city, b.owner_id, b.plan, b.plan_expires, b.logo_image, b.gst, b.rating_avg, b.rating_count,
+const CARD_COLS = `b.id, b.slug, b.name, b.city, b.owner_id, b.plan, b.plan_expires, b.logo_image, b.gst, b.gst_status, b.rating_avg, b.rating_count,
   (SELECT group_concat(type) FROM business_types t WHERE t.business_id = b.id) AS types`;
 const ORDER = `ORDER BY (b.plan = 'premium' AND (b.plan_expires IS NULL OR b.plan_expires > strftime('%s','now'))) DESC,
   (b.owner_id IS NOT NULL) DESC, b.created_at DESC, b.id DESC`;
 const PAGE_SIZE = 24;
 const crumbs = (c: Context<AppEnv>, items: [string, string][]) => ({ "@context": "https://schema.org", "@type": "BreadcrumbList", itemListElement: [["Directory", "/directory"] as [string, string], ...items].map(([name, path], i) => ({ "@type": "ListItem", position: i + 1, name, item: `${siteUrl(c)}${path}` })) });
 
-type Filters = { q?: string; city?: string; type?: string; claimed?: boolean; state?: string; sort?: string };
+type Filters = { q?: string; city?: string; type?: string; claimed?: boolean; gstok?: boolean; state?: string; sort?: string };
 
 function where(f: Filters): { sql: string; args: unknown[] } {
   const parts: string[] = [];
@@ -44,6 +46,7 @@ function where(f: Filters): { sql: string; args: unknown[] } {
     args.push(t.slug, `%${t.keyword}%`);
   }
   if (f.claimed) parts.push(`b.owner_id IS NOT NULL`);
+  if (f.gstok) parts.push(`b.gst IS NOT NULL`);
   return { sql: parts.length ? `WHERE ${parts.join(" AND ")}` : "", args };
 }
 
@@ -191,6 +194,7 @@ function listing(title: string, sub: string, basePath: string, f: Filters, pageN
     if (showFilters && f.type) u.set("type", f.type);
     if (showFilters && f.state) u.set("state", STATES.find((s) => s.label === f.state)?.slug ?? "");
     if (f.claimed) u.set("claimed", "1");
+    if (f.gstok) u.set("gstok", "1");
     if (f.sort) u.set("sort", f.sort);
     if (p > 1) u.set("page", String(p));
     const s = u.toString();
@@ -208,7 +212,7 @@ function listing(title: string, sub: string, basePath: string, f: Filters, pageN
             <label>Search<input name="q" value={f.q ?? ""} placeholder="Name, GSTIN or city" /></label>
             <label>Sort by<select name="sort" data-autosubmit><option value="">Featured and claimed first</option><option value="name" selected={f.sort === "name"}>Name A to Z</option><option value="views" selected={f.sort === "views"}>Most viewed</option><option value="rated" selected={f.sort === "rated"}>Top rated</option></select></label>
             {showFilters && (
-              <details class="flt" open={!!(f.city || f.type || f.state || f.claimed)}><summary class="small gold">Filter by city, state or type</summary>
+              <details class="flt" open={!!(f.city || f.type || f.state || f.claimed || f.gstok)}><summary class="small gold">Filter by city, state or type</summary>
                 <label style="margin-top:10px">City
                   <select name="city"><option value="">All cities</option>{CITIES.map((ct) => <option value={ct.slug} selected={f.city === ct.slug}>{ct.label}</option>)}</select>
                 </label>
@@ -218,10 +222,10 @@ function listing(title: string, sub: string, basePath: string, f: Filters, pageN
                 <label>Business type
                   <select name="type"><option value="">All types</option>{TRADE_TYPES.map((t) => <option value={t.slug} selected={f.type === t.slug}>{t.label}</option>)}</select>
                 </label>
-                <label class="row"><input type="checkbox" name="claimed" value="1" checked={!!f.claimed} /> Claimed by owner</label>
+                <label class="row"><input type="checkbox" name="claimed" value="1" checked={!!f.claimed} /> Claimed by owner</label><label class="row"><input type="checkbox" name="gstok" value="1" checked={!!f.gstok} /> GSTIN on record</label>
               </details>
             )}
-            {!showFilters && <label class="row"><input type="checkbox" name="claimed" value="1" checked={!!f.claimed} /> Claimed by owner</label>}
+            {!showFilters && <><label class="row"><input type="checkbox" name="claimed" value="1" checked={!!f.claimed} /> Claimed by owner</label><label class="row"><input type="checkbox" name="gstok" value="1" checked={!!f.gstok} /> GSTIN on record</label></>}
             <button class="btn block" type="submit">Apply</button>
             <a class="small muted center" style="display:block;margin-top:10px" href={basePath}>Clear filters</a>
           </form>
@@ -247,7 +251,7 @@ function listing(title: string, sub: string, basePath: string, f: Filters, pageN
 const pageNum = (v?: string) => Math.min(2000, Math.max(1, parseInt(v ?? "1", 10) || 1));
 
 pub.get("/directory", async (c) => {
-  const f: Filters = { q: c.req.query("q"), city: findCity(c.req.query("city"))?.slug, type: findType(c.req.query("type"))?.slug, claimed: c.req.query("claimed") === "1", sort: ["name", "views", "rated"].includes(c.req.query("sort") ?? "") ? c.req.query("sort") : undefined, state: findState(c.req.query("state"))?.label };
+  const f: Filters = { q: c.req.query("q"), city: findCity(c.req.query("city"))?.slug, type: findType(c.req.query("type"))?.slug, claimed: c.req.query("claimed") === "1", gstok: c.req.query("gstok") === "1", sort: ["name", "views", "rated"].includes(c.req.query("sort") ?? "") ? c.req.query("sort") : undefined, state: findState(c.req.query("state"))?.label };
   const p = pageNum(c.req.query("page"));
   const data = await search(c.env.DB, f, p);
   const filtered = !!(f.q || f.city || f.type || f.claimed || f.state || f.sort || p > 1);
@@ -263,7 +267,7 @@ pub.get("/city/:slug", async (c) => {
     if (!row || !row.city || row.n < 1) return c.notFound();
     city = { slug, label: row.city, note: row.state ?? "India" };
   }
-  const f: Filters = { q: c.req.query("q"), city: city.slug, claimed: c.req.query("claimed") === "1", sort: ["name", "views", "rated"].includes(c.req.query("sort") ?? "") ? c.req.query("sort") : undefined };
+  const f: Filters = { q: c.req.query("q"), city: city.slug, claimed: c.req.query("claimed") === "1", gstok: c.req.query("gstok") === "1", sort: ["name", "views", "rated"].includes(c.req.query("sort") ?? "") ? c.req.query("sort") : undefined };
   const p = pageNum(c.req.query("page"));
   const data = await search(c.env.DB, f, p);
   return page(c, {
@@ -293,7 +297,7 @@ pub.get("/city/:slug/:type", async (c) => {
 pub.get("/category/:slug", async (c) => {
   const t = findType(c.req.param("slug"));
   if (!t) return c.notFound();
-  const f: Filters = { q: c.req.query("q"), type: t.slug, claimed: c.req.query("claimed") === "1", sort: ["name", "views", "rated"].includes(c.req.query("sort") ?? "") ? c.req.query("sort") : undefined };
+  const f: Filters = { q: c.req.query("q"), type: t.slug, claimed: c.req.query("claimed") === "1", gstok: c.req.query("gstok") === "1", sort: ["name", "views", "rated"].includes(c.req.query("sort") ?? "") ? c.req.query("sort") : undefined };
   const p = pageNum(c.req.query("page"));
   const data = await search(c.env.DB, f, p);
   return page(c, { title: `${t.label} — jewellery trade directory`, desc: `Find ${t.label.toLowerCase()} in the Indian jewellery trade. ${data.total.toLocaleString("en-IN")} businesses listed.`, path: `/category/${t.slug}`, jsonld: crumbs(c, [["Categories", "/categories"], [t.label, `/category/${t.slug}`]]), noindex: p > 1 || !!f.q },
@@ -326,7 +330,7 @@ pub.get("/states", async (c) => {
 pub.get("/state/:slug", async (c) => {
   const st = findState(c.req.param("slug"));
   if (!st) return c.notFound();
-  const f: Filters = { q: c.req.query("q"), state: st.label, claimed: c.req.query("claimed") === "1", sort: ["name", "views", "rated"].includes(c.req.query("sort") ?? "") ? c.req.query("sort") : undefined };
+  const f: Filters = { q: c.req.query("q"), state: st.label, claimed: c.req.query("claimed") === "1", gstok: c.req.query("gstok") === "1", sort: ["name", "views", "rated"].includes(c.req.query("sort") ?? "") ? c.req.query("sort") : undefined };
   const p = pageNum(c.req.query("page"));
   const data = await search(c.env.DB, f, p);
   return page(c, {
@@ -393,6 +397,8 @@ pub.get("/b/:slug", async (c) => {
     db.prepare(`SELECT count(*) AS n FROM products WHERE business_id = ? AND active = 1`).bind(b.id).first<{ n: number }>(),
   ]);
   c.executionCtx.waitUntil(db.prepare(`UPDATE businesses SET views = views + 1 WHERE id = ?`).bind(b.id).run());
+  if (!isBot(c.req.header("user-agent"))) c.executionCtx.waitUntil(db.prepare(`INSERT INTO stats_daily (day, business_id, views) VALUES (?, ?, 1) ON CONFLICT (day, business_id) DO UPDATE SET views = views + 1`).bind(statDay(), b.id).run());
+  const waiting = b.owner_id ? 0 : ((await db.prepare(`SELECT count(*) AS n FROM enquiries WHERE business_id = ?`).bind(b.id).first<{ n: number }>())?.n ?? 0);
   const premium = isPremium(b);
   const claimed = !!b.owner_id;
   const viewer = c.get("user");
@@ -427,6 +433,14 @@ pub.get("/b/:slug", async (c) => {
       ...(b.logo_image ? { image: `${siteUrl(c)}/img/${b.logo_image}` } : {}) },
   }, (
     <main class="wrap" style="padding-top:26px">
+      {!claimed && (
+        <div class="card claimbar" style="margin-bottom:12px">
+          <div class="row between" style="gap:12px">
+            <div><b>Is this your business?</b><div class="small muted">{waiting > 0 ? `${waiting} buyer ${waiting === 1 ? "enquiry is" : "enquiries are"} waiting for you. ` : ""}Claim it free in two minutes to correct details, add your catalogue and receive enquiries.</div></div>
+            <a class="btn" href={me ? `/dashboard/claim?b=${b.slug}` : `/signup?next=${encodeURIComponent(`/dashboard/claim?b=${b.slug}`)}`}>Claim this listing</a>
+          </div>
+        </div>
+      )}
       <div class="card" style={premium ? "border-color:rgba(233,196,106,.6)" : undefined}>
         <div class="row" style="align-items:flex-start;gap:18px">
           <div class="biz" style="width:96px;flex:none"><div class="top" style="margin:0;height:96px;border-radius:20px">{b.logo_image ? <img src={`/img/${b.logo_image}`} alt="" /> : initials(b.name)}</div></div>
@@ -487,13 +501,6 @@ pub.get("/b/:slug", async (c) => {
             </div>
           )}
 
-          {!claimed && (
-            <div class="band" style="padding:26px">
-              <h2 style="font-size:22px">Is this your business?</h2>
-              <p class="muted small">Claim it free to add your catalogue, contact buttons, photos and bio link.</p>
-              <a class="btn" href={`/dashboard/claim?b=${b.slug}`}>Claim this listing</a>
-            </div>
-          )}
         </div>
 
         <aside class="stack">
@@ -536,7 +543,7 @@ pub.get("/b/:slug", async (c) => {
             <h2 style="font-size:18px;margin-bottom:10px">Send an enquiry</h2>
             {sent && <Flash ok="Thanks! Your enquiry has been sent." />}
             {err && <Flash err={err} />}
-            {claimed ? (
+            {(
               <form method="post" action={`/b/${b.slug}/enquiry`}>
                 {productId && /^\d+$/.test(productId) && <input type="hidden" name="product_id" value={productId} />}
                 <Field label="Your name" name="name" required max={80} />
@@ -545,9 +552,9 @@ pub.get("/b/:slug", async (c) => {
                 <input name="website" tabindex={-1} autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true" />
                 <Turnstile c={c} />
                 <button class="btn block" type="submit">Send enquiry</button>
-                <p class="tiny muted center">Your number is shared only with this business.</p>
+                <p class="tiny muted center">{claimed ? "Your number is shared only with this business." : "The owner has not claimed this listing yet. We will tell them a buyer is waiting; your details are shown only after they verify ownership."}</p>
               </form>
-            ) : <p class="small muted">Enquiries open once the owner claims this listing.</p>}
+            )}
           </div>
         </aside>
       </div>
@@ -563,7 +570,7 @@ pub.get("/b/:slug", async (c) => {
 
 pub.post("/b/:slug/enquiry", async (c) => {
   const b = await loadBusiness(c.env.DB, c.req.param("slug"));
-  if (!b || !b.owner_id) return c.notFound();
+  if (!b) return c.notFound();
   const back = (q: string) => c.redirect(`/b/${b.slug}?${q}#enquiry`, 303);
   const f = await c.req.parseBody();
   if (typeof f.website === "string" && f.website) return back("sent=1"); // honeypot
@@ -584,6 +591,15 @@ pub.post("/b/:slug/enquiry", async (c) => {
     c.executionCtx.waitUntil((async () => {
       const owner = await c.env.DB.prepare(`SELECT email FROM users WHERE id = ?`).bind(b.owner_id).first<{ email: string }>();
       await sendMail(c.env, reqUrl, owner?.email, `New enquiry for ${b.name}`, `You have a new enquiry on ${brand}.\n\nFrom: ${name}\nMobile: ${phone}\n${message ? `Message: ${message}\n` : ""}\nOpen your enquiries: ${siteUrl(c)}/dashboard/enquiries`);
+    })());
+  }
+  if (!b.owner_id && (await allow(c.env, `enq:nudge:${b.id}`, 1, 7 * 86400))) {
+    // Unclaimed listing: tell the business a buyer is waiting (at most once a week, never the buyer's details).
+    const reqUrl = c.req.url, brand = c.env.BRAND_NAME, base = siteUrl(c);
+    c.executionCtx.waitUntil((async () => {
+      const pc = await c.env.DB.prepare(`SELECT lower(email) AS email FROM private_contacts WHERE business_id = ? AND email LIKE '%_@_%._%'`).bind(b.id).first<{ email: string }>();
+      if (!pc || (await c.env.DB.prepare(`SELECT 1 AS x FROM mail_optout WHERE email = ?`).bind(pc.email).first())) return;
+      await sendMail(c.env, reqUrl, pc.email, `A buyer is asking for ${b.name}`, `A buyer has sent an enquiry for ${b.name} on ${brand}, a trade directory for India's jewellery and bullion businesses.\n\nYour listing: ${base}/b/${b.slug}\n\nThe listing has not been claimed, so we are holding the enquiry. Claim it free to read it and reply:\n${base}/signup?next=${encodeURIComponent(`/dashboard/claim?b=${b.slug}`)}\n\nRegards,\n${brand}\n\nTo get no further email from us: ${base}/optout?e=${encodeURIComponent(pc.email)}&t=${await optToken(c.env, pc.email)}`);
     })());
   }
   return back("sent=1");

@@ -134,6 +134,8 @@ account.get("/dashboard", async (c) => {
     db.prepare(`SELECT (SELECT coalesce(sum(clicks),0) FROM products WHERE business_id = ?1) + (SELECT coalesce(sum(clicks),0) FROM links WHERE business_id = ?1) AS n`).bind(b.id).first<{ n: number }>(),
   ]);
   const base = siteUrl(c);
+  const wk = await db.prepare(`SELECT coalesce(sum(CASE WHEN day >= date('now', '+330 minutes', '-6 days') THEN views END), 0) AS d7, coalesce(sum(views), 0) AS d30 FROM stats_daily WHERE business_id = ? AND day >= date('now', '+330 minutes', '-29 days')`).bind(b.id).first<{ d7: number; d30: number }>();
+  const enq30 = await db.prepare(`SELECT count(*) AS n FROM enquiries WHERE business_id = ? AND created_at > ?`).bind(b.id, now() - 30 * 86400).first<{ n: number }>();
   const mine = (await db.prepare(`SELECT id, title, status, views, kind FROM requests WHERE user_id = ? ORDER BY created_at DESC LIMIT 10`).bind(c.get("user")!.id).all<{ id: number; title: string; status: string; views: number; kind: string }>()).results;
   const reqs = (await db.prepare(`SELECT id, title, qty, city FROM requests WHERE status = 'open' AND created_at > ? ORDER BY created_at DESC LIMIT 4`).bind(now() - 30 * 86400).all<{ id: number; title: string; qty: string | null; city: string | null }>()).results;
   return shell(c, b.name, (
@@ -143,6 +145,15 @@ account.get("/dashboard", async (c) => {
         <div class="card stat"><b>{clicks?.n ?? 0}</b><span class="small muted">Clicks</span></div>
         <div class="card stat"><b>{e?.n ?? 0}</b><span class="small muted">New enquiries</span></div>
         <div class="card stat"><b>{isPremium(b) ? "Premium" : "Free"}</b><span class="small muted">Plan</span></div>
+      </div>
+      <div class="card">
+        <div class="row between"><b>Visitors</b><span class="tiny muted">People only; search-engine robots are not counted</span></div>
+        <div class="row" style="gap:22px;margin-top:8px"><span><b style="font-size:20px">{wk?.d7 ?? 0}</b><div class="tiny muted">last 7 days</div></span><span><b style="font-size:20px">{wk?.d30 ?? 0}</b><div class="tiny muted">last 30 days</div></span><span><b style="font-size:20px">{enq30?.n ?? 0}</b><div class="tiny muted">enquiries, 30 days</div></span></div>
+      </div>
+      <div class="card">
+        <b>Bring walk-in customers online</b>
+        <p class="small muted" style="margin:6px 0 10px">Print a QR standee for your counter so customers can see your catalogue and leave a review. Show today's gold and silver rates on your shop TV.</p>
+        <div class="row"><a class="btn sm" href={`/b/${b.slug}/standee`} target="_blank">Print QR standee</a><a class="btn ghost sm" href={`/b/${b.slug}/rate-board`} target="_blank">Open rate board for shop TV</a><a class="btn ghost sm" href={`/b/${b.slug}/qr.svg`} download={`${b.slug}-qr.svg`}>Download QR</a></div>
       </div>
       <div class="card stack">
         <div><b>Your public pages</b></div>

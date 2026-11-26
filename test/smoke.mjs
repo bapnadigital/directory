@@ -154,5 +154,14 @@ r = await other("/admin/invites", { method: "POST", form: { n: "50" } }); r = aw
 r = await anon("/optout?e=a@b.co&t=bad"); ok("bad opt-out link rejected", r.text.includes("not valid"));
 r = await anon("/hi"); ok("Hindi page", r.status === 200 && r.text.includes("डायरेक्टरी"));
 r = await anon("/gu"); ok("Gujarati page", r.status === 200 && r.text.includes("ડિરેક્ટરી"));
+r = await anon("/b/sparkle-diam"); ok("unclaimed listing shows claim prompt and enquiry form", r.text.includes("Is this your business?") && r.text.includes('action="/b/sparkle-diam/enquiry"'));
+r = await anon("/b/sparkle-diam/enquiry", { method: "POST", form: { name: "Buyer One", phone: "9833333333", message: "Need solitaires" } }); ok("enquiry accepted on unclaimed listing", r.loc.includes("sent=1"));
+r = await anon("/b/sparkle-diam"); ok("claim prompt shows waiting enquiry, not buyer details", r.text.includes("1 buyer enquiry is waiting") && !r.text.includes("9833333333"));
+r = await anon("/b/test-gold-jewellers/qr.svg"); ok("QR code", r.status === 200 && r.text.startsWith("<svg"));
+r = await anon("/b/test-gold-jewellers/standee"); ok("QR standee", r.status === 200 && r.text.includes("Find us on Jewellery Sahi Hai"));
+r = await anon("/b/test-gold-jewellers/rate-board"); ok("rate board for claimed listing", r.status === 200 && r.text.includes("Today"));
+r = await anon("/b/sparkle-diam/rate-board"); ok("no rate board for unclaimed listing", r.status === 404);
+r = await anon("/directory?gstok=1"); ok("GSTIN filter", r.status === 200);
+r = await adminC("/admin"); ok("admin visitors section", r.text.includes("Visitors, last 7 days"));
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

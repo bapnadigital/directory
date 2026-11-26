@@ -43,6 +43,10 @@ admin.get("/", async (c) => {
   const revs = (await db.prepare(`SELECT r.id, r.rating, r.body, r.status, r.created_at, b.name AS bname, b.slug, u.name AS uname FROM reviews r JOIN businesses b ON b.id = r.business_id JOIN users u ON u.id = r.user_id ORDER BY r.created_at DESC LIMIT 20`).all<{ id: number; rating: number; body: string | null; status: string; created_at: number; bname: string; slug: string; uname: string }>()).results;
   const mailStats = await db.prepare(`SELECT (SELECT count(*) FROM rate_subs WHERE confirmed = 1) AS subs, (SELECT count(*) FROM rate_alerts WHERE fired_at IS NULL) AS alerts`).first<{ subs: number; alerts: number }>();
   const inv = await inviteStats(c.env);
+  const topCities = (await db.prepare(`SELECT coalesce(b.city, '—') AS k, sum(s.views) AS n FROM stats_daily s JOIN businesses b ON b.id = s.business_id WHERE s.day >= date('now', '+330 minutes', '-6 days') GROUP BY b.city ORDER BY n DESC LIMIT 8`).all<{ k: string; n: number }>()).results;
+  const topBiz = (await db.prepare(`SELECT b.name AS k, b.slug, sum(s.views) AS n FROM stats_daily s JOIN businesses b ON b.id = s.business_id WHERE s.day >= date('now', '+330 minutes', '-6 days') GROUP BY s.business_id ORDER BY n DESC LIMIT 8`).all<{ k: string; slug: string; n: number }>()).results;
+  const visits7 = (await db.prepare(`SELECT day, sum(views) AS n FROM stats_daily WHERE day >= date('now', '+330 minutes', '-6 days') GROUP BY day ORDER BY day`).all<{ day: string; n: number }>()).results;
+  const heldEnq = await db.prepare(`SELECT count(*) AS n FROM enquiries e JOIN businesses b ON b.id = e.business_id WHERE b.owner_id IS NULL`).first<{ n: number }>();
   const sample = inviteText(c.env.BRAND_NAME, siteUrl(c), "Your Business Name", "your-business", `${siteUrl(c)}/optout?e=...`);
   const reqs = (await db.prepare(`SELECT id, title, city, name, phone, status, views, created_at, kind FROM requests ORDER BY created_at DESC LIMIT 30`).all<{ id: number; title: string; city: string | null; name: string; phone: string; status: string; views: number; created_at: number }>()).results;
   const banners = (await db.prepare(`SELECT id, title, url, image_id, placement, active, ends_at, views, clicks FROM banners ORDER BY placement, position, id DESC LIMIT 100`).all<{ id: number; title: string; url: string; image_id: number | null; placement: string; active: number; ends_at: number | null; views: number; clicks: number }>()).results;
@@ -54,7 +58,7 @@ admin.get("/", async (c) => {
         {([["Businesses", biz?.n], ["Claimed", claimed?.n], ["Members", users?.n], ["Premium", premium?.n], ["Enquiries", enq?.n]] as const).map(([l, n]) => <div class="card stat"><b>{(n ?? 0).toLocaleString("en-IN")}</b><span class="small muted">{l}</span></div>)}
       </div>
 
-      <nav class="row" style="gap:6px;margin:14px 0 0" aria-label="Admin sections">{[["claims", "Claims"], ["payments", "Membership"], ["reports", "Reports"], ["views", "Contact views"], ["board", "Trade board"], ["events", "Events"], ["adleads", "Ad enquiries"], ["listings", "Find a listing"], ["invites", "Claim invites"], ["reviews", "Reviews"], ["banners", "Banners"]].map(([i, l]) => <a class="badge" href={`#${i}`}>{l}</a>)}</nav>
+      <nav class="row" style="gap:6px;margin:14px 0 0" aria-label="Admin sections">{[["claims", "Claims"], ["payments", "Membership"], ["reports", "Reports"], ["views", "Contact views"], ["board", "Trade board"], ["events", "Events"], ["adleads", "Ad enquiries"], ["listings", "Find a listing"], ["visitors", "Visitors"], ["invites", "Claim invites"], ["reviews", "Reviews"], ["banners", "Banners"]].map(([i, l]) => <a class="badge" href={`#${i}`}>{l}</a>)}</nav>
 
       <section id="claims"><h2 style="font-size:20px;margin-bottom:10px">Claims to review ({claims.results.length})</h2>
         {claims.results.length === 0 ? <div class="card muted small">Nothing waiting.</div> : <div class="card"><table><tr><th>Business</th><th>Claimed by</th><th>Details</th><th></th></tr>
@@ -148,6 +152,18 @@ admin.get("/", async (c) => {
         {revs.length === 0 ? <div class="card small muted">No reviews yet.</div> : <div class="card"><table><tr><th>Business</th><th>Review</th><th></th></tr>
           {revs.map((r) => <tr style={r.status === "live" ? undefined : "opacity:.55"}><td><a class="gold" href={`/b/${r.slug}#reviews`} target="_blank">{r.bname}</a><div class="tiny muted">{r.uname} · {when(r.created_at)}</div></td><td class="small" style="white-space:normal">{"★".repeat(r.rating)} {r.body}</td>
             <td><form method="post" action={`/admin/reviews/${r.id}/${r.status === "live" ? "hidden" : "live"}`}><button class="btn ghost sm" type="submit">{r.status === "live" ? "Hide" : "Show"}</button></form></td></tr>)}</table></div>}
+      </section>
+      <section id="visitors">
+        <h2 style="font-size:20px;margin-bottom:10px">Visitors, last 7 days</h2>
+        <div class="card">
+          <p class="small muted">Listing page visits by people. Search-engine robots are not counted. {heldEnq?.n ?? 0} enquiries are being held for unclaimed listings.</p>
+          {visits7.length === 0 ? <p class="small muted">No visits recorded yet. Counting started when this section was added.</p> : (<>
+            <div class="row small" style="gap:14px;margin:8px 0">{visits7.map((d) => <span><b>{d.n}</b><div class="tiny muted">{d.day.slice(5)}</div></span>)}</div>
+            <div class="grid g2">
+              <div><b class="small">Top cities</b>{topCities.map((r) => <div class="row between small"><span>{r.k}</span><span>{r.n}</span></div>)}</div>
+              <div><b class="small">Most visited listings</b>{topBiz.map((r) => <div class="row between small"><a class="gold" href={`/b/${r.slug}`} target="_blank">{r.k}</a><span>{r.n}</span></div>)}</div>
+            </div></>)}
+        </div>
       </section>
       <section id="invites">
         <h2 style="font-size:20px;margin-bottom:10px">Claim invitations</h2>
